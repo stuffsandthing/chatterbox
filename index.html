@@ -118,6 +118,14 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 .cbtn.off{background:#fff;color:#000}
 .cbtn.end{background:#dc2626;width:auto;border-radius:28px;padding:0 22px;font-size:16px}
 
+/* screen sharing */
+#callGrid{overflow:auto}
+.tile.screen{grid-column:1/-1;min-height:55vh;background:#000}
+.tile.screen video{object-fit:contain}
+.tile .fsb{position:absolute;right:10px;bottom:8px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:6px;padding:2px 8px}
+#shareBar{display:flex;align-items:center;justify-content:center;gap:10px;background:#16a34a;color:#fff;padding:6px 12px;font-size:13px}
+.cbtn.sharing{background:#16a34a}
+
 /* staged files + voice */
 #pending{display:flex;gap:8px;overflow-x:auto;padding:8px 12px;background:var(--panel);border-top:1px solid var(--line)}
 .chip{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 8px;flex:none;max-width:300px}
@@ -262,11 +270,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 <div id="call" class="hidden">
   <div id="callTop"><b id="callTitle"></b><span id="callTimer">0:00</span></div>
   <div id="callPeople"></div>
+  <div id="shareBar" class="hidden"><span>🖥️ You’re sharing your screen</span><button class="btn danger small" id="shareStop">Stop sharing</button></div>
   <div id="callGrid"></div>
   <div class="tile local" id="localTile"><div class="big" id="localBig"></div><video id="localVideo" autoplay playsinline muted></video><span class="lbl">You</span></div>
   <div id="callBar">
     <button class="cbtn" id="cMic" title="Mute / unmute">🎤</button>
     <button class="cbtn" id="cCam" title="Camera on / off">📷</button>
+    <button class="cbtn" id="cShare" title="Share your screen">🖥️</button>
     <button class="cbtn end" id="cEnd">End call</button>
   </div>
 </div>
@@ -1275,6 +1285,7 @@ async function handleSignal(s) {
     case 'answer': await onAnswer(from, p.sdp); break;
     case 'ice': addIce(from, p.c); break;
     case 'state': call.state[from] = p; updateTile(from); break;
+    case 'screen': if (!p.on) removeScreen(from); break;
     case 'decline': call.status[from] = 'declined'; if (!group) endAfter(nameFor(from) + ' declined'); break;
     case 'busy': call.status[from] = 'busy'; if (!group) endAfter(nameFor(from) + ' is busy'); break;
     case 'leave': closePeer(from); call.status[from] = 'left'; if (!group) endAfter('Call ended'); break;
@@ -1378,6 +1389,7 @@ async function joinCall(id, convId, kind, host) {
   setAv($('#localBig'), myProfile.avatar_url, myProfile.display_name);
   $('#localTile').classList.toggle('hidden', !hasVid);
   $('#cCam').classList.toggle('hidden', !hasVid);
+  $('#cShare').classList.toggle('hidden', !navigator.mediaDevices?.getDisplayMedia);   // phones usually can't share
   $('#cMic').classList.remove('off'); $('#cMic').textContent = '🎤';
   $('#cCam').classList.remove('off');
   $('#callTimer').textContent = '0:00';
@@ -1403,7 +1415,22 @@ function makePeer(uid) {
   c.peers[uid] = peer;
   c.local.getTracks().forEach(t => pc.addTrack(t, c.local));
   pc.onicecandidate = e => { if (e.candidate && call === c) sendSignals(c, [uid], 'ice', { c: e.candidate.toJSON() }); };
+  // if we're already sharing when someone joins, they get the screen too
+  if (c.screen) c.screen.senders[uid] = c.screen.stream.getTracks().map(t => pc.addTrack(t, c.screen.stream));
+  // adding/removing a screen later means negotiating again (only after the first handshake is done)
+  pc.onnegotiationneeded = async () => {
+    if (!peer.ready || call !== c) return;
+    try {
+      const offer = await pc.createOffer();
+      if (pc.signalingState !== 'stable') return;
+      await pc.setLocalDescription(offer);
+      await sendSignals(c, [uid], 'offer', { sdp: { type: offer.type, sdp: offer.sdp } });
+    } catch (e) { console.warn(e); }
+  };
   pc.ontrack = e => {
+    const s = e.streams[0]; if (!s) return;
+    if (!peer.mainId) peer.mainId = s.id;                 // first stream = their camera/mic
+    if (s.id !== peer.mainId) return showScreen(uid, s);  // any other stream = their shared screen
     const t = ensureTile(uid);
     if (t.video.srcObject !== e.streams[0]) t.video.srcObject = e.streams[0];
     t.video.play().catch(() => {});
@@ -1435,13 +1462,14 @@ async function onOffer(from, sdp) {
     await flushIce(from);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
+    p.ready = true;
     await sendSignals(c, [from], 'answer', { sdp: { type: answer.type, sdp: answer.sdp } });
   } catch (e) { console.warn(e); }
 }
 async function onAnswer(from, sdp) {
   const p = call.peers[from];
   if (!p || p.pc.signalingState !== 'have-local-offer') return;
-  try { await p.pc.setRemoteDescription(sdp); await flushIce(from); } catch (e) { console.warn(e); }
+  try { await p.pc.setRemoteDescription(sdp); await flushIce(from); p.ready = true; } catch (e) { console.warn(e); }
 }
 function addIce(uid, cand) {
   const p = call.peers[uid];
@@ -1457,6 +1485,7 @@ function closePeer(uid) {
   const p = call?.peers[uid];
   if (p) { try { p.pc.close(); } catch {} delete call.peers[uid]; }
   document.getElementById('tile-' + uid)?.remove();
+  removeScreen(uid);
 }
 
 /* ---- call screen ---- */
@@ -1503,6 +1532,50 @@ $('#cCam').onclick = () => {
 };
 $('#cEnd').onclick = () => hangUp();
 
+/* ---- screen sharing ---- */
+async function startShare() {
+  const c = call; if (!c || c.screen) return;
+  let stream;
+  try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: true }); }
+  catch (e) { if (e.name !== 'NotAllowedError') alert('Couldn’t start screen sharing: ' + (e.message || e.name)); return; }
+  if (call !== c) { stream.getTracks().forEach(t => t.stop()); return; }
+  c.screen = { stream, senders: {} };
+  stream.getVideoTracks()[0].onended = stopShare;          // the browser's own "Stop sharing" button
+  Object.keys(c.peers).forEach(uid => {
+    c.screen.senders[uid] = stream.getTracks().map(t => c.peers[uid].pc.addTrack(t, stream));
+  });
+  $('#cShare').classList.add('sharing'); $('#shareBar').classList.remove('hidden');
+}
+function stopShare() {
+  const c = call; if (!c?.screen) return;
+  const { stream, senders } = c.screen; c.screen = null;
+  stream.getTracks().forEach(t => { t.onended = null; t.stop(); });
+  Object.entries(senders).forEach(([uid, list]) => {
+    const p = c.peers[uid];
+    if (p) list.forEach(s => { try { p.pc.removeTrack(s); } catch {} });
+  });
+  sendSignals(c, Object.keys(c.peers), 'screen', { on: false });
+  $('#cShare').classList.remove('sharing'); $('#shareBar').classList.add('hidden');
+}
+$('#cShare').onclick = () => (call?.screen ? stopShare() : startShare());
+$('#shareStop').onclick = stopShare;
+
+function showScreen(uid, stream) {
+  let el = document.getElementById('screen-' + uid);
+  if (!el) {
+    el = document.createElement('div'); el.className = 'tile screen'; el.id = 'screen-' + uid;
+    el.innerHTML = `<video autoplay playsinline></video><span class="lbl">${esc(nameFor(uid))}’s screen</span><button class="fsb" title="Full screen">⛶</button>`;
+    $('#callGrid').prepend(el);
+    el.querySelector('.fsb').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen?.());
+  }
+  const v = el.querySelector('video');
+  if (v.srcObject !== stream) v.srcObject = stream;
+  v.play().catch(() => {});
+  stream.onremovetrack = () => { if (!stream.getTracks().length) removeScreen(uid); };
+  stream.getVideoTracks().forEach(t => { t.onended = () => removeScreen(uid); });
+}
+function removeScreen(uid) { document.getElementById('screen-' + uid)?.remove(); }
+
 function endAfter(msg) {
   if (!call) return;
   const c = call; $('#callTitle').textContent = msg;
@@ -1514,6 +1587,8 @@ async function hangUp(quiet = false) {
   clearInterval(c.timer);
   Object.values(c.peers).forEach(p => { try { p.pc.close(); } catch {} });
   c.local.getTracks().forEach(t => t.stop());
+  if (c.screen) c.screen.stream.getTracks().forEach(t => { t.onended = null; t.stop(); });
+  $('#cShare').classList.remove('sharing'); $('#shareBar').classList.add('hidden');
   $('#call').classList.add('hidden');
   $('#callGrid').innerHTML = '';
   $('#localVideo').srcObject = null;
