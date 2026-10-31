@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Chatterbox</title>
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f46e5'/%3E%3Cpath d='M14 16h36a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H30l-10 9v-9h-6a4 4 0 0 1-4-4V20a4 4 0 0 1 4-4z' fill='white'/%3E%3Ccircle cx='23' cy='30' r='3' fill='%234f46e5'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%234f46e5'/%3E%3Ccircle cx='41' cy='30' r='3' fill='%234f46e5'/%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--bg:#f4f5f7;--panel:#fff;--text:#1c1e21;--muted:#6b7280;--line:#e5e7eb;--accent:#4f46e5;--accent-text:#fff;--me:#4f46e5;--me-text:#fff;--other:#eceef2;--danger:#dc2626}
@@ -110,9 +112,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 .tile video.novid{opacity:0}
 .tile .big{width:84px;height:84px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:600}
 .tile .lbl{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:6px;font-size:12px;z-index:1}
-.tile.local{position:absolute;right:14px;bottom:96px;width:120px;height:170px;z-index:2;border:2px solid rgba(255,255,255,.3)}
+.tile.local{position:absolute;right:14px;bottom:96px;width:min(200px,38vw);height:calc(min(200px,38vw) * 9 / 16);z-index:2;border:2px solid rgba(255,255,255,.3)}
 .tile.local video{transform:scaleX(-1)}
-.tile.local .big{width:52px;height:52px;font-size:22px}
+.tile.local .big{width:40px;height:40px;font-size:18px}
 #callBar{display:flex;gap:14px;justify-content:center;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
 .cbtn{width:56px;height:56px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:22px}
 .cbtn.off{background:#fff;color:#000}
@@ -125,6 +127,19 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 .tile .fsb{position:absolute;right:10px;bottom:8px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:6px;padding:2px 8px}
 #shareBar{display:flex;align-items:center;justify-content:center;gap:10px;background:#16a34a;color:#fff;padding:6px 12px;font-size:13px}
 .cbtn.sharing{background:#16a34a}
+
+/* in-call chat */
+.cbtn{position:relative}
+.cbtn .badge{position:absolute;top:-2px;right:-2px;background:#dc2626;color:#fff;border-radius:999px;font-size:11px;min-width:18px;height:18px;line-height:18px;padding:0 4px;font-weight:600}
+#callChat{position:fixed;right:14px;top:70px;width:min(320px,92vw);height:min(360px,50vh);z-index:6;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden}
+#ccHead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);cursor:grab;touch-action:none;user-select:none}
+#ccHead button{background:none;border:0;color:var(--muted);font-size:16px;padding:0 4px}
+#ccMsgs{flex:1;min-height:0;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px}
+.ccm{max-width:85%;padding:5px 9px;border-radius:10px;background:var(--other);align-self:flex-start;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap}
+.ccm.me{background:var(--me);color:var(--me-text);align-self:flex-end}
+.ccm .n{font-size:11px;font-weight:600;color:var(--accent);display:block}
+#ccForm{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);align-items:flex-end}
+#ccForm textarea{flex:1;width:auto;resize:none;max-height:80px;min-height:34px;padding:6px 10px}
 
 /* staged files + voice */
 #pending{display:flex;gap:8px;overflow-x:auto;padding:8px 12px;background:var(--panel);border-top:1px solid var(--line)}
@@ -272,11 +287,17 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
   <div id="callPeople"></div>
   <div id="shareBar" class="hidden"><span>🖥️ You’re sharing your screen</span><button class="btn danger small" id="shareStop">Stop sharing</button></div>
   <div id="callGrid"></div>
+  <div id="callChat" class="hidden">
+    <div id="ccHead"><b>💬 Chat</b><button id="ccClose" title="Hide chat">✕</button></div>
+    <div id="ccMsgs"></div>
+    <div id="ccForm"><textarea id="ccText" rows="1" placeholder="Message…"></textarea><button class="btn small" id="ccSend">Send</button></div>
+  </div>
   <div class="tile local" id="localTile"><div class="big" id="localBig"></div><video id="localVideo" autoplay playsinline muted></video><span class="lbl">You</span></div>
   <div id="callBar">
     <button class="cbtn" id="cMic" title="Mute / unmute">🎤</button>
     <button class="cbtn" id="cCam" title="Camera on / off">📷</button>
     <button class="cbtn" id="cShare" title="Share your screen">🖥️</button>
+    <button class="cbtn" id="cChat" title="Chat during the call">💬<span class="badge hidden" id="ccBadge"></span></button>
     <button class="cbtn end" id="cEnd">End call</button>
   </div>
 </div>
@@ -750,6 +771,7 @@ function subscribe() {
       const m = p.new;
       if (m.sender_id === me.id && m.conversation_id === activeId) return;
       if (!getConv(m.conversation_id)) await loadConvs();
+      if (call && m.conversation_id === call.convId) callChatAdd(m);
       if (m.conversation_id === activeId) appendMsg(m);
       else if (m.sender_id !== me.id) unread.add(m.conversation_id);
       await loadConvs(); if (tab === 'chats') renderChats();
@@ -1371,7 +1393,7 @@ async function joinCall(id, convId, kind, host) {
     alert('Calls need a browser that supports them and a secure (https) page.'); return false;
   }
   let local = null;
-  try { local = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === 'video' ? { facingMode: 'user' } : false }); }
+  try { local = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } } : false }); }
   catch {
     if (kind === 'video') {
       try { local = await navigator.mediaDevices.getUserMedia({ audio: true }); alert('Couldn’t use your camera, so you’re joining with audio only.'); } catch {}
@@ -1532,6 +1554,85 @@ $('#cCam').onclick = () => {
 };
 $('#cEnd').onclick = () => hangUp();
 
+/* ---- in-call chat (same chat as the conversation you're calling in) ---- */
+let ccUnread = 0, ccDrag = null;
+function updateBadge() { $('#ccBadge').textContent = ccUnread; $('#ccBadge').classList.toggle('hidden', !ccUnread); }
+
+// keep the panel on screen and never over the call buttons
+function placeChat(x, y) {
+  const p = $('#callChat'), w = p.offsetWidth;
+  const barTop = $('#callBar').getBoundingClientRect().top - 8;
+  x = Math.min(Math.max(0, x), Math.max(0, innerWidth - w));
+  y = Math.min(Math.max(0, y), Math.max(0, barTop - 160));
+  p.style.left = x + 'px'; p.style.top = y + 'px'; p.style.right = 'auto';
+  p.style.maxHeight = Math.max(160, barTop - y) + 'px';
+}
+$('#ccHead').onpointerdown = e => {
+  if (e.target.closest('button')) return;
+  const r = $('#callChat').getBoundingClientRect();
+  ccDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+  try { $('#ccHead').setPointerCapture(e.pointerId); } catch {}
+};
+$('#ccHead').onpointermove = e => { if (ccDrag) placeChat(e.clientX - ccDrag.dx, e.clientY - ccDrag.dy); };
+$('#ccHead').onpointerup = $('#ccHead').onpointercancel = () => { ccDrag = null; };
+window.addEventListener('resize', () => {
+  const p = $('#callChat'); if (p.classList.contains('hidden')) return;
+  const r = p.getBoundingClientRect(); placeChat(r.left, r.top);
+});
+
+async function toggleCallChat(force) {
+  if (!call) return;
+  const p = $('#callChat'), show = force ?? p.classList.contains('hidden');
+  p.classList.toggle('hidden', !show);
+  if (!show) return;
+  ccUnread = 0; updateBadge();
+  if (!p.style.left) placeChat(innerWidth - p.offsetWidth - 14, 70);
+  if (!call.ccLoaded) {
+    call.ccLoaded = true;
+    const c = call;
+    const { data } = await sb.from('messages').select('*').eq('conversation_id', c.convId).order('created_at', { ascending: false }).limit(30);
+    if (call === c) { $('#ccMsgs').innerHTML = ''; (data || []).reverse().forEach(m => callChatAdd(m, true)); }
+  }
+  $('#ccMsgs').scrollTop = $('#ccMsgs').scrollHeight;
+  $('#ccText').focus();
+}
+function callChatAdd(m, quiet) {
+  if (!call || m.conversation_id !== call.convId) return;
+  const box = $('#ccMsgs');
+  if (box.querySelector(`[data-id="${m.id}"]`)) return;
+  const mine = m.sender_id === me.id;
+  const body = m.body || (m.file_type?.startsWith('audio/') ? '🎤 voice message' : m.file_name ? '📎 ' + m.file_name : '');
+  const div = document.createElement('div');
+  div.className = 'ccm' + (mine ? ' me' : ''); div.dataset.id = m.id;
+  div.innerHTML = (mine ? '' : `<span class="n">${esc(nameFor(m.sender_id))}</span>`) + esc(body);
+  box.appendChild(div); box.scrollTop = box.scrollHeight;
+  if (!quiet && !mine && $('#callChat').classList.contains('hidden')) { ccUnread++; updateBadge(); }
+}
+async function sendCallMsg() {
+  const t = $('#ccText'), body = clampText(t.value).trim();
+  if (!body || !call) return;
+  const c = call;
+  t.value = '';
+  const { data, error } = await sb.from('messages').insert({ conversation_id: c.convId, sender_id: me.id, body }).select().single();
+  if (error) { t.value = body; return alert(error.message); }
+  callChatAdd(data);
+  if (activeId === data.conversation_id) appendMsg(data);
+  bumpConv(data.conversation_id);
+}
+function resetCallChat() {
+  const p = $('#callChat');
+  p.classList.add('hidden'); p.style.left = p.style.top = p.style.maxHeight = ''; p.style.right = '';
+  $('#ccMsgs').innerHTML = ''; $('#ccText').value = ''; ccUnread = 0; updateBadge();
+}
+$('#cChat').onclick = () => toggleCallChat();
+$('#ccClose').onclick = () => toggleCallChat(false);
+$('#ccSend').onclick = sendCallMsg;
+$('#ccText').onkeydown = e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCallMsg(); }
+  else if (e.key === 'Enter' && lineCount(e.target.value) >= MAX_LINES) e.preventDefault();
+};
+$('#ccText').oninput = e => { const v = clampText(e.target.value); if (v !== e.target.value) e.target.value = v; };
+
 /* ---- screen sharing ---- */
 async function startShare() {
   const c = call; if (!c || c.screen) return;
@@ -1589,6 +1690,7 @@ async function hangUp(quiet = false) {
   c.local.getTracks().forEach(t => t.stop());
   if (c.screen) c.screen.stream.getTracks().forEach(t => { t.onended = null; t.stop(); });
   $('#cShare').classList.remove('sharing'); $('#shareBar').classList.add('hidden');
+  resetCallChat();
   $('#call').classList.add('hidden');
   $('#callGrid').innerHTML = '';
   $('#localVideo').srcObject = null;
