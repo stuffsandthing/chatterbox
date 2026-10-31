@@ -1,0 +1,1768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chatterbox</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%234f46e5'/%3E%3Cpath fill='white' d='M22 28c0-5.5 4.5-10 10-10h36c5.5 0 10 4.5 10 10v28c0 5.5-4.5 10-10 10H48l-14 12v-12H32c-5.5 0-10-4.5-10-10V28z'/%3E%3Ccircle cx='40' cy='42' r='5' fill='%234f46e5'/%3E%3Ccircle cx='50' cy='42' r='5' fill='%234f46e5'/%3E%3Ccircle cx='60' cy='42' r='5' fill='%234f46e5'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%234f46e5'/%3E%3Cpath fill='white' d='M22 28c0-5.5 4.5-10 10-10h36c5.5 0 10 4.5 10 10v28c0 5.5-4.5 10-10 10H48l-14 12v-12H32c-5.5 0-10-4.5-10-10V28z'/%3E%3Ccircle cx='40' cy='42' r='5' fill='%234f46e5'/%3E%3Ccircle cx='50' cy='42' r='5' fill='%234f46e5'/%3E%3Ccircle cx='60' cy='42' r='5' fill='%234f46e5'/%3E%3C/svg%3E">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f4f5f7;--panel:#fff;--text:#1c1e21;--muted:#6b7280;--line:#e5e7eb;--accent:#4f46e5;--accent-text:#fff;--me:#4f46e5;--me-text:#fff;--other:#eceef2;--danger:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--panel:#181b21;--text:#e8eaed;--muted:#9aa0aa;--line:#2a2e36;--accent:#6366f1;--other:#262a33}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+.btn{background:var(--accent);color:var(--accent-text);border:0;border-radius:8px;padding:8px 14px}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn.danger{background:var(--danger)}
+.btn.small{padding:4px 10px;font-size:13px}
+input[type=text],input[type=email],input[type=password],textarea,select{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+
+/* auth */
+#auth{min-height:100%;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;width:100%;max-width:380px}
+.card h1{margin:0 0 4px;font-size:24px}
+.card p.sub{margin:0 0 18px;color:var(--muted)}
+.card label{display:block;margin:12px 0 4px;font-size:13px;color:var(--muted)}
+.card .btn{width:100%;margin-top:18px;padding:11px}
+.switch{text-align:center;margin-top:14px;color:var(--muted)}
+.switch a{color:var(--accent);cursor:pointer}
+.err{color:var(--danger);margin-top:12px;min-height:1em;font-size:14px}
+.ok{color:#16a34a}
+#rateBanner{background:#fef2f2;color:#dc2626;font-size:13px;padding:8px 14px;text-align:center;border-top:1px solid #fecaca}
+@media (prefers-color-scheme:dark){#rateBanner{background:#3f1a1a;color:#fca5a5;border-top-color:#7f1d1d}}
+
+/* app layout */
+#app{height:100%;display:grid;grid-template-columns:340px 1fr}
+#side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.me-bar{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.me-bar .who{flex:1;min-width:0}
+.me-bar .who b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.me-bar .who span{color:var(--muted);font-size:13px}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;padding:11px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+.tools{padding:10px 12px;display:flex;gap:8px}
+.list{flex:1;overflow-y:auto;min-height:0}
+.row{display:flex;align-items:center;gap:11px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
+.row:hover,.row.on{background:var(--bg)}
+.row .t{flex:1;min-width:0}
+.row .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .t span{color:var(--muted);font-size:13px}
+.row.unread .t b{color:var(--accent)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.av{width:40px;height:40px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;flex:none}
+.av.sm{width:30px;height:30px;font-size:13px}
+.empty{padding:30px 20px;color:var(--muted);text-align:center}
+
+/* chat */
+#main{display:flex;flex-direction:column;min-width:0;min-height:0;height:100%}
+#chatHead{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+#chatHead .t{flex:1;min-width:0}
+#chatHead .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chatHead .t span{color:var(--muted);font-size:13px}
+#back{display:none}
+#msgs{flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.msg{max-width:min(75%,560px);padding:8px 12px;border-radius:14px;background:var(--other);align-self:flex-start;word-wrap:break-word;overflow-wrap:anywhere}
+.msg.me{background:var(--me);color:var(--me-text);align-self:flex-end}
+.msg .nm{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:2px}
+.msg .tx{white-space:pre-wrap}
+.msg .tm{font-size:11px;opacity:.65;margin-top:3px;text-align:right}
+.msg img{max-width:100%;max-height:300px;border-radius:8px;display:block;margin-bottom:4px}
+.msg a.file{display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none;background:rgba(0,0,0,.08);padding:8px 10px;border-radius:8px}
+.daysep{align-self:center;color:var(--muted);font-size:12px;margin:8px 0}
+#composer{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;background:var(--panel);border-top:1px solid var(--line)}
+#composer textarea{resize:none;max-height:140px;min-height:40px}
+#upStatus{font-size:13px;color:var(--muted);padding:4px 14px;background:var(--panel)}
+#noChat{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);padding:20px;text-align:center}
+
+/* avatars */
+.av img,.big img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.em{font-size:1.35em;line-height:1}
+#meAv{cursor:pointer}
+.pgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:10px 0}
+.pgrid button{aspect-ratio:1;border-radius:50%;border:2px solid transparent;padding:0;display:flex;align-items:center;justify-content:center}
+.pgrid button.sel{border-color:var(--text)}
+
+/* online dots + calls */
+.av{position:relative}
+.av.online::after{content:'';position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:#22c55e;border:2px solid var(--panel)}
+.av.sm.online::after{width:10px;height:10px}
+#incoming{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
+.inbox{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;text-align:center;width:100%;max-width:320px}
+.inbox .av{width:72px;height:72px;font-size:30px;margin:0 auto 12px;animation:pulse 1.4s infinite}
+@keyframes pulse{50%{transform:scale(1.08)}}
+#inTitle{font-size:18px;font-weight:600}
+#inSub{color:var(--muted);margin:4px 0 18px}
+.inbtns{display:flex;gap:10px;justify-content:center}
+#call{position:fixed;inset:0;background:#0b0d11;z-index:40;display:flex;flex-direction:column;color:#fff}
+#callTop{display:flex;justify-content:space-between;align-items:center;padding:12px 16px}
+#callPeople{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 8px;font-size:12px}
+.pchip{background:rgba(255,255,255,.12);border-radius:999px;padding:3px 10px;display:flex;gap:6px;align-items:center}
+.pchip button{background:#4f46e5;color:#fff;border:0;border-radius:999px;padding:1px 9px;font-size:12px}
+#callGrid{flex:1;min-height:0;display:grid;gap:8px;padding:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));grid-auto-rows:1fr}
+#callGrid:empty{display:flex;align-items:center;justify-content:center}
+#callGrid:empty::before{content:'Waiting for others to join…';color:#9aa0aa}
+.tile{position:relative;background:#1b1f27;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0}
+.tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tile video.novid{opacity:0}
+.tile .big{width:84px;height:84px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:600}
+.tile .lbl{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:6px;font-size:12px;z-index:1}
+.tile.local{position:absolute;right:14px;bottom:96px;width:120px;height:170px;z-index:2;border:2px solid rgba(255,255,255,.3)}
+.tile.local video.mirror{transform:scaleX(-1)}
+.tile.local .big{width:52px;height:52px;font-size:22px}
+#callBar{display:flex;gap:14px;justify-content:center;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+.cbtn{width:56px;height:56px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:22px}
+.cbtn.off{background:#fff;color:#000}
+.cbtn.end{background:#dc2626;width:auto;border-radius:28px;padding:0 22px;font-size:16px}
+.cbtn.on{background:#16a34a}
+
+/* call chat panel */
+#callChat{position:absolute;right:0;top:0;bottom:90px;width:min(340px,100%);background:rgba(15,17,21,.92);backdrop-filter:blur(12px);border-left:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;z-index:5;transform:translateX(100%);transition:transform .25s ease}
+#callChat.open{transform:translateX(0)}
+#callChatHead{display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.1);gap:8px}
+#callChatHead b{flex:1}
+#callMsgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:6px}
+#callMsgs .msg{max-width:90%;font-size:13px}
+#callComposer{display:flex;gap:6px;padding:10px;border-top:1px solid rgba(255,255,255,.1)}
+#callComposer textarea{flex:1;min-height:36px;max-height:80px;resize:none;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:8px 10px;color:#fff}
+#callComposer .btn{padding:8px 12px}
+#callChatToggle{position:absolute;right:14px;top:60px;z-index:6;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:18px}
+#callChatToggle.has-new{background:#4f46e5}
+
+/* avatar editor */
+#avEditor{display:flex;flex-direction:column;gap:12px}
+#avCanvasWrap{position:relative;width:100%;aspect-ratio:1;background:#1b1f27;border-radius:12px;overflow:hidden;touch-action:none}
+#avCanvas{width:100%;height:100%;display:block;cursor:move}
+.avTools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.avTools label{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.avTools input[type=range]{width:100px}
+.avTools input[type=color]{width:32px;height:28px;padding:0;border:0;background:none;cursor:pointer}
+.avLayerList{max-height:120px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px}
+.avLayer{display:flex;align-items:center;gap:8px;padding:6px;border-radius:6px;cursor:pointer;font-size:13px}
+.avLayer.on{background:var(--bg)}
+.avLayer .x{margin-left:auto;background:none;border:0;color:var(--muted);font-size:16px}
+
+/* staged files + voice */
+#pending{display:flex;gap:8px;overflow-x:auto;padding:8px 12px;background:var(--panel);border-top:1px solid var(--line)}
+.chip{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 8px;flex:none;max-width:300px}
+.chip img{width:44px;height:44px;object-fit:cover;border-radius:6px}
+.chip audio{height:34px;width:200px}
+.chip .nm2{min-width:0;font-size:12px}
+.chip .nm2 b{display:block;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip .x{background:none;border:0;font-size:20px;line-height:1;color:var(--muted);padding:0 4px}
+#recBar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line);color:var(--danger)}
+.recdot{width:10px;height:10px;border-radius:50%;background:var(--danger);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+#mic.rec{background:var(--danger);color:#fff;border-color:var(--danger)}
+.msg audio{width:260px;max-width:100%;display:block;margin-bottom:4px}
+
+/* image viewer */
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:30;display:flex;overflow:auto;padding:64px 12px 12px}
+#lbImg{margin:auto;max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;cursor:zoom-in}
+#lbImg.zoomed{max-width:none;max-height:none;cursor:zoom-out}
+.lbBar{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:10px 12px;background:rgba(0,0,0,.65);color:#fff;z-index:31}
+.lbBar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lbBar a.btn{text-decoration:none}
+
+/* modal */
+#modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
+#modal{background:var(--panel);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;border:1px solid var(--line)}
+#modal:has(#avEditor){max-width:480px}
+#modal h3{margin:0 0 12px}
+.chk{display:flex;align-items:center;gap:10px;padding:6px 0}
+.chk input{width:auto}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+@media (max-width:760px){
+  #app{grid-template-columns:1fr}
+  #main{display:none}
+  #app.show-chat #side{display:none}
+  #app.show-chat #main{display:flex}
+  #back{display:inline-block}
+  .msg{max-width:88%}
+}
+</style>
+</head>
+<body>
+
+<!-- ======= AUTH ======= -->
+<div id="auth" class="hidden">
+  <div class="card">
+    <h1>Chatterbox</h1>
+    <p class="sub" id="authSub">Sign in to start chatting</p>
+    <form id="authForm">
+      <div id="suFields" class="hidden">
+        <label for="username">Username (letters, numbers, _ — 3 to 20)</label>
+        <input type="text" id="username" autocomplete="username" autocapitalize="none" maxlength="20">
+        <label for="dname">Display name</label>
+        <input type="text" id="dname" maxlength="40">
+      </div>
+      <label for="email">Email</label>
+      <input type="email" id="email" autocomplete="email" required>
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="current-password" required minlength="6">
+      <button class="btn" id="authBtn" type="submit">Sign in</button>
+    </form>
+    <form id="resetForm" class="hidden">
+      <label for="rUser">Username</label>
+      <input type="text" id="rUser" autocapitalize="none" autocomplete="username">
+      <label for="rCode">Recovery code</label>
+      <input type="text" id="rCode" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocapitalize="characters" autocomplete="off">
+      <label for="rPass">New password</label>
+      <input type="password" id="rPass" autocomplete="new-password" minlength="6">
+      <button class="btn" type="submit" id="rBtn">Reset password</button>
+      <div class="switch"><a id="backToLogin">Back to sign in</a></div>
+    </form>
+    <div class="err" id="authErr"></div>
+    <div class="switch" id="switchRow"><span id="switchTxt">No account?</span> <a id="switchLink">Sign up</a></div>
+    <div class="switch" id="forgotRow"><a id="forgotLink">Forgot password?</a></div>
+  </div>
+</div>
+
+<!-- ======= APP ======= -->
+<div id="app" class="hidden">
+  <aside id="side">
+    <div class="me-bar">
+      <div class="av" id="meAv"></div>
+      <div class="who"><b id="meName"></b><span id="meUser"></span></div>
+      <button class="btn ghost small" id="logout">Log out</button>
+    </div>
+    <div class="tabs">
+      <button id="tabChats" class="on">Chats</button>
+      <button id="tabPeople">People</button>
+    </div>
+    <div id="chatsTools" class="tools"><button class="btn" style="flex:1" id="newGroup">+ New group</button></div>
+    <div id="peopleTools" class="tools hidden"><input type="text" id="search" placeholder="Search by username or name…"></div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <section id="main">
+    <div id="noChat">Pick a chat or find someone in People to start talking.</div>
+    <div id="chatView" style="display:none;flex-direction:column;flex:1;min-height:0">
+      <div id="chatHead">
+        <button class="btn ghost small" id="back">←</button>
+        <div class="av sm" id="chAv"></div>
+        <div class="t"><b id="chTitle"></b><span id="chSub"></span></div>
+        <button class="btn ghost small" id="callVoice" title="Voice call">📞</button>
+        <button class="btn ghost small" id="callVideo" title="Video call">🎥</button>
+        <button class="btn ghost small" id="infoBtn">Info</button>
+      </div>
+      <div id="msgs"></div>
+      <div id="upStatus" class="hidden"></div>
+      <div id="pending" class="hidden"></div>
+      <div id="recBar" class="hidden"><span class="recdot"></span><span>Recording… <b id="recTime">0:00</b></span><button class="btn ghost small" id="recCancel" style="margin-left:auto">Cancel</button></div>
+      <div id="composer">
+        <button class="btn ghost" id="attach" title="Attach a file">📎</button>
+        <button class="btn ghost" id="mic" title="Record a voice message">🎤</button>
+        <input type="file" id="fileInput" multiple class="hidden">
+        <textarea id="text" rows="1" placeholder="Type a message…"></textarea>
+        <button class="btn" id="send">Send</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="incoming" class="hidden">
+  <div class="inbox">
+    <div class="av" id="inAv"></div>
+    <div id="inTitle"></div>
+    <div id="inSub"></div>
+    <div class="inbtns">
+      <button class="btn danger" id="inDecline">Decline</button>
+      <button class="btn" id="inAccept" style="background:#16a34a">Accept</button>
+    </div>
+  </div>
+</div>
+
+<div id="call" class="hidden">
+  <div id="callTop"><b id="callTitle"></b><span id="callTimer">0:00</span></div>
+  <div id="callPeople"></div>
+  <div id="callGrid"></div>
+  <div class="tile local" id="localTile"><div class="big" id="localBig"></div><video id="localVideo" autoplay playsinline muted></video><span class="lbl">You</span></div>
+  <button id="callChatToggle" title="Call chat">💬</button>
+  <div id="callChat">
+    <div id="callChatHead"><b>Call chat</b><button class="btn ghost small" id="callChatClose" style="color:#fff">✕</button></div>
+    <div id="callMsgs"></div>
+    <div id="callComposer">
+      <textarea id="callText" rows="1" placeholder="Message during call…"></textarea>
+      <button class="btn" id="callSend">Send</button>
+    </div>
+  </div>
+  <div id="callBar">
+    <button class="cbtn" id="cMic" title="Mute / unmute">🎤</button>
+    <button class="cbtn" id="cCam" title="Camera on / off">📷</button>
+    <button class="cbtn" id="cShare" title="Share screen">🖥️</button>
+    <button class="cbtn end" id="cEnd">End call</button>
+  </div>
+</div>
+
+<div id="lightbox" class="hidden">
+  <div class="lbBar"><span id="lbName"></span><a class="btn small" id="lbDl" href="#">⬇ Download</a><button class="btn ghost small" id="lbClose" style="color:#fff">✕ Close</button></div>
+  <img id="lbImg" alt="">
+</div>
+
+<div id="modalWrap" class="hidden"><div id="modal"></div></div>
+
+<script>
+/* ================================================================
+   1) PUT YOUR SUPABASE DETAILS HERE (Project Settings > API)
+   The anon/public key is designed to be public — your data is
+   protected by the row level security rules in supabase-setup.sql.
+   Never put the service_role key in this file.
+   ================================================================ */
+const SUPABASE_URL = 'https://cylppnwhdeqaflktoyya.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHBwbndoZGVxYWZsa3RveXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzNzk1NzEsImV4cCI6MjEwODk1NTU3MX0.Tqaa7Ny4C64s5SKLFEui_jX_7d3lIADfATtyvUPuK_U';
+const MAX_FILE_MB = 25;
+const BUCKET = 'chat-files';
+/* ================================================================ */
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const initial = s => (s || '?').trim().charAt(0).toUpperCase();
+const fmtSize = n => n > 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1, Math.round(n/1024))+' KB';
+const fmtTime = d => new Date(d).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+const fmtDay = d => new Date(d).toLocaleDateString([], {weekday:'short', day:'numeric', month:'short'});
+
+if (SUPABASE_URL.includes('YOUR-PROJECT')) {
+  document.body.innerHTML = '<div style="padding:30px;font-family:system-ui"><h2>Almost there</h2><p>Open <code>index.html</code> in a text editor and put your Supabase URL and anon key near the top of the script.</p></div>';
+  throw new Error('Supabase not configured');
+}
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let me = null, myProfile = null;
+let convs = [];                 // conversations I'm in
+let contacts = [];              // profiles I've saved
+let contactIds = new Set();
+let profiles = {};              // id -> profile cache
+let activeId = null;
+let tab = 'chats';
+let unread = new Set();
+let channel = null;
+let lastDay = '';
+
+/* ---------------- AUTH ---------------- */
+let signupMode = false;
+function setMode(su) {
+  signupMode = su;
+  $('#suFields').classList.toggle('hidden', !su);
+  $('#authBtn').textContent = su ? 'Create account' : 'Sign in';
+  $('#authSub').textContent = su ? 'Create an account to chat' : 'Sign in to start chatting';
+  $('#switchTxt').textContent = su ? 'Already have an account?' : 'No account?';
+  $('#switchLink').textContent = su ? 'Sign in' : 'Sign up';
+  $('#password').autocomplete = su ? 'new-password' : 'current-password';
+  $('#forgotRow').classList.toggle('hidden', su);
+  $('#authErr').textContent = '';
+}
+$('#switchLink').onclick = () => setMode(!signupMode);
+
+$('#authForm').onsubmit = async e => {
+  e.preventDefault();
+  const err = $('#authErr'); err.className = 'err'; err.textContent = '';
+  const email = $('#email').value.trim(), password = $('#password').value;
+  $('#authBtn').disabled = true;
+  try {
+    if (signupMode) {
+      const username = $('#username').value.trim().toLowerCase();
+      const display_name = $('#dname').value.trim() || username;
+      if (!/^[a-z0-9_]{3,20}$/.test(username)) throw new Error('Username must be 3–20 letters, numbers or underscores.');
+      const { data: free } = await sb.rpc('username_available', { u: username });
+      if (free === false) throw new Error('That username is taken.');
+      const { data, error } = await sb.auth.signUp({ email, password, options: { data: { username, display_name } } });
+      if (error) throw error;
+      if (data.session) {
+        showCodeAfterStart = true;
+        if (myProfile && !$('#app').classList.contains('hidden')) { showCodeAfterStart = false; showRecoveryCode(true); }
+      }
+      if (!data.session) { err.className = 'err ok'; err.textContent = 'Account created! Check your email to confirm, then sign in.'; setMode(false); err.className='err ok'; err.textContent='Account created! Check your email to confirm, then sign in.'; }
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+  } catch (ex) { err.textContent = ex.message || 'Something went wrong.'; }
+  $('#authBtn').disabled = false;
+};
+
+$('#logout').onclick = async () => { await sb.auth.signOut(); };
+
+sb.auth.onAuthStateChange((event, session) => {
+  const uid = session?.user?.id || null;
+  if (uid === (me?.id || null)) return;      // ignore token refreshes
+  setTimeout(() => uid ? startApp(session.user) : stopApp(), 0);
+});
+sb.auth.getSession().then(({ data }) => { if (!data.session) { $('#auth').classList.remove('hidden'); } });
+
+async function startApp(user) {
+  me = user;
+  const { data: p, error } = await sb.from('profiles').select('*').eq('id', me.id).maybeSingle();
+  if (!p) {
+    alert('Your profile was not found. Did you run supabase-setup.sql before creating this account? ' + (error?.message || ''));
+    await sb.auth.signOut(); return;
+  }
+  myProfile = p; profiles[p.id] = p;
+  $('#auth').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  setAv($('#meAv'), p.avatar_url, p.display_name); $('#meAv').title = 'Edit your profile';
+  $('#meName').textContent = p.display_name;
+  $('#meUser').textContent = '@' + p.username;
+  await Promise.all([loadContacts(), loadConvs()]);
+  render();
+  subscribe();
+  startPresence();
+  startSignals();
+  if (showCodeAfterStart) { showCodeAfterStart = false; showRecoveryCode(true); }
+}
+
+function stopApp() {
+  stopCalls();
+  if (channel) { sb.removeChannel(channel); channel = null; }
+  me = null; myProfile = null; convs = []; contacts = []; activeId = null; profiles = {}; unread.clear();
+  $('#app').classList.add('hidden'); $('#app').classList.remove('show-chat');
+  $('#auth').classList.remove('hidden');
+  $('#password').value = '';
+  showChat(false);
+}
+
+/* ---------------- DATA ---------------- */
+async function loadContacts() {
+  const { data } = await sb.from('contacts').select('contact_id, profiles:contact_id(id,username,display_name,avatar_url)').eq('owner_id', me.id);
+  contacts = (data || []).map(r => r.profiles).filter(Boolean).sort((a,b) => a.display_name.localeCompare(b.display_name));
+  contactIds = new Set(contacts.map(c => c.id));
+  contacts.forEach(c => profiles[c.id] = c);
+}
+
+async function loadConvs() {
+  const { data: mem } = await sb.from('conversation_members').select('conversation_id').eq('user_id', me.id);
+  const ids = (mem || []).map(m => m.conversation_id);
+  if (!ids.length) { convs = []; return; }
+  const { data } = await sb.from('conversations')
+    .select('*, conversation_members(user_id, profiles(id,username,display_name,avatar_url))')
+    .in('id', ids).order('last_message_at', { ascending: false });
+  convs = data || [];
+  convs.forEach(c => c.conversation_members.forEach(m => { if (m.profiles) profiles[m.profiles.id] = m.profiles; }));
+}
+
+const getConv = id => convs.find(c => c.id === id);
+function convTitle(c) {
+  if (c.is_group) return c.name || 'Group';
+  const o = c.conversation_members.find(m => m.user_id !== me.id);
+  return o?.profiles?.display_name || 'Chat';
+}
+function convSub(c) {
+  if (c.is_group) {
+    const k = c.conversation_members.filter(m => m.user_id !== me.id && online.has(m.user_id)).length;
+    return c.conversation_members.length + ' members · ' + k + ' online';
+  }
+  const o = c.conversation_members.find(m => m.user_id !== me.id);
+  return o?.profiles ? '@' + o.profiles.username + (online.has(o.user_id) ? ' · online' : '') : '';
+}
+async function nameOf(id) {
+  if (profiles[id]) return profiles[id];
+  const { data } = await sb.from('profiles').select('*').eq('id', id).maybeSingle();
+  if (data) profiles[id] = data;
+  return data || { id, display_name: 'Someone', username: '?' };
+}
+
+/* ---------------- SIDEBAR ---------------- */
+function setTab(t) {
+  tab = t;
+  $('#tabChats').classList.toggle('on', t === 'chats');
+  $('#tabPeople').classList.toggle('on', t === 'people');
+  $('#chatsTools').classList.toggle('hidden', t !== 'chats');
+  $('#peopleTools').classList.toggle('hidden', t !== 'people');
+  render();
+}
+$('#tabChats').onclick = () => setTab('chats');
+$('#tabPeople').onclick = () => setTab('people');
+
+function render() { tab === 'chats' ? renderChats() : renderPeople(); }
+
+function renderChats() {
+  const el = $('#list');
+  if (!convs.length) { el.innerHTML = '<div class="empty">No chats yet.<br>Go to <b>People</b> to find someone, or make a group.</div>'; return; }
+  el.innerHTML = convs.map(c => `
+    <div class="row ${c.id === activeId ? 'on' : ''} ${unread.has(c.id) ? 'unread' : ''}" data-id="${c.id}">
+      <div class="av" data-uid="${dmOther(c)}" style="${avStyle(convAvatar(c))}">${avInner(convAvatar(c), convTitle(c))}</div>
+      <div class="t"><b>${esc(convTitle(c))}</b><span>${c.is_group ? 'Group · ' : ''}${esc(convSub(c))}</span></div>
+      ${unread.has(c.id) ? '<div class="dot"></div>' : ''}
+    </div>`).join('');
+  el.querySelectorAll('.row').forEach(r => r.onclick = () => openConv(r.dataset.id));
+  refreshOnline();
+}
+
+let searchTimer;
+$('#search').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderPeople, 250); };
+
+let peopleSeq = 0;
+async function renderPeople() {
+  const el = $('#list');
+  const q = $('#search').value.trim().replace(/[%,()]/g, '');
+  let people, heading = '';
+  const mySeq = ++peopleSeq;
+  if (q.length >= 2) {
+    const qq = q.replace(/\*/g, '');
+    const { data, error } = await sb.from('profiles').select('id,username,display_name,avatar_url')
+      .or(`username.ilike.*${qq}*,display_name.ilike.*${qq}*`).neq('id', me.id).limit(25);
+    if (mySeq !== peopleSeq) return;          // a newer search replaced this one
+    if (error) { console.error('search failed', error); el.innerHTML = '<div class="empty">Search failed: ' + esc(error.message) + '</div>'; return; }
+    people = data || [];
+    heading = '<div class="empty" style="padding:10px 14px;text-align:left">Search results</div>';
+    if (!people.length) { el.innerHTML = '<div class="empty">Nobody found for “' + esc(q) + '”.</div>'; return; }
+  } else {
+    people = contacts;
+    if (!people.length) { el.innerHTML = '<div class="empty">No contacts yet.<br>Search above for a username or name, then tap <b>Add</b>.</div>'; return; }
+    heading = '<div class="empty" style="padding:10px 14px;text-align:left">Your contacts</div>';
+  }
+  people.forEach(p => profiles[p.id] = p);
+  el.innerHTML = heading + people.map(p => `
+    <div class="row" style="cursor:default">
+      <div class="av" data-uid="${p.id}" style="${avStyle(p.avatar_url)}">${avInner(p.avatar_url, p.display_name)}</div>
+      <div class="t"><b>${esc(p.display_name)}</b><span>@${esc(p.username)}</span></div>
+      <button class="btn small" data-chat="${p.id}">Chat</button>
+      <button class="btn ghost small" data-toggle="${p.id}">${contactIds.has(p.id) ? 'Remove' : 'Add'}</button>
+    </div>`).join('');
+  el.querySelectorAll('[data-chat]').forEach(b => b.onclick = () => startDM(b.dataset.chat));
+  el.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => toggleContact(b.dataset.toggle));
+  refreshOnline();
+}
+
+async function toggleContact(id) {
+  if (contactIds.has(id)) await sb.from('contacts').delete().eq('owner_id', me.id).eq('contact_id', id);
+  else await sb.from('contacts').insert({ owner_id: me.id, contact_id: id });
+  await loadContacts(); renderPeople();
+}
+
+async function startDM(otherId) {
+  const { data, error } = await sb.rpc('create_dm', { other: otherId });
+  if (error) return alert(error.message);
+  await loadConvs();
+  setTab('chats');
+  openConv(data);
+}
+
+/* ---------------- CHAT VIEW ---------------- */
+function showChat(on) {
+  $('#noChat').style.display = on ? 'none' : 'flex';
+  const v = $('#chatView'); v.style.display = on ? 'flex' : 'none';
+  $('#app').classList.toggle('show-chat', on);
+}
+$('#back').onclick = () => { activeId = null; showChat(false); render(); };
+
+async function openConv(id) {
+  activeId = id; unread.delete(id);
+  stopRec(true); clearPending();
+  const c = getConv(id);
+  if (!c) return;
+  $('#chTitle').textContent = convTitle(c);
+  $('#chSub').textContent = convSub(c);
+  setAv($('#chAv'), convAvatar(c), convTitle(c));
+  $('#chAv').dataset.uid = dmOther(c);
+  refreshOnline();
+  showChat(true);
+  render();
+  $('#msgs').innerHTML = ''; lastDay = '';
+  const { data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true }).limit(300);
+  if (activeId !== id) return;
+  for (const m of data || []) await appendMsg(m, false);
+  scrollDown();
+}
+
+function scrollDown() { const m = $('#msgs'); m.scrollTop = m.scrollHeight; }
+
+async function appendMsg(m, scroll = true) {
+  if (document.querySelector(`[data-mid="${m.id}"]`)) return;
+  const box = $('#msgs');
+  const day = fmtDay(m.created_at);
+  if (day !== lastDay) { lastDay = day; box.insertAdjacentHTML('beforeend', `<div class="daysep">${esc(day)}</div>`); }
+  const mine = m.sender_id === me.id;
+  const c = getConv(m.conversation_id);
+  let name = '';
+  if (!mine && c?.is_group) name = `<div class="nm">${esc((await nameOf(m.sender_id)).display_name)}</div>`;
+  let file = '';
+  if (m.file_path) {
+    const isImg = (m.file_type || '').startsWith('image/');
+    const isAud = (m.file_type || '').startsWith('audio/');
+    file = isAud
+      ? `<audio controls preload="metadata" data-path="${esc(m.file_path)}"></audio>`
+      : isImg
+      ? `<img data-path="${esc(m.file_path)}" data-name="${esc(m.file_name)}" alt="${esc(m.file_name)}" style="cursor:zoom-in">`
+      : `<a class="file" data-path="${esc(m.file_path)}" data-dl="${esc(m.file_name)}" href="#">📎 <span>${esc(m.file_name)}<br><small>${fmtSize(m.file_size || 0)}</small></span></a>`;
+  }
+  const div = document.createElement('div');
+  div.className = 'msg' + (mine ? ' me' : '');
+  div.dataset.mid = m.id;
+  div.innerHTML = `${name}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="tm">${fmtTime(m.created_at)}</div>`;
+  box.appendChild(div);
+  div.querySelectorAll('[data-path]').forEach(async el => {
+    const dl = el.dataset.dl ? { download: el.dataset.dl } : undefined;
+    const { data } = await sb.storage.from(BUCKET).createSignedUrl(el.dataset.path, 3600, dl);
+    if (!data) return;
+    if (el.tagName === 'IMG') { el.src = data.signedUrl; el.onclick = () => openLightbox(data.signedUrl, el.dataset.path, el.dataset.name); el.onload = () => { if (scroll) scrollDown(); }; }
+    else if (el.tagName === 'AUDIO') el.src = data.signedUrl;
+    else el.href = data.signedUrl;
+  });
+  if (scroll) scrollDown();
+}
+
+let pending = [];   // staged files: { file, url }
+let sending = false;
+
+/* ---- anti-spam rate limit (client-side) ---- */
+const sendTimes = [];
+const RATE_LIMIT = 16;      // max messages
+const RATE_WINDOW = 60_000; // 1 minute
+function checkRateLimit() {
+  const now = Date.now();
+  while (sendTimes.length && now - sendTimes[0] > RATE_WINDOW) sendTimes.shift();
+  if (sendTimes.length >= RATE_LIMIT) {
+    const secs = Math.ceil((RATE_WINDOW - (now - sendTimes[0])) / 1000);
+    return `Too many messages sent in 1 minute. Please wait ${secs}s.`;
+  }
+  return null;
+}
+function recordSend() { sendTimes.push(Date.now()); }
+function showRateLimit(msg) {
+  let el = document.getElementById('rateBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'rateBanner';
+  }
+  el.textContent = msg;
+  const inCallChat = call && !$('#call').classList.contains('hidden') && $('#callChat').classList.contains('open');
+  const target = inCallChat ? $('#callComposer') : $('#composer');
+  if (target && el.parentNode !== target.parentNode) {
+    target.parentNode.insertBefore(el, target);
+  }
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.remove(), 4500);
+}
+
+function addPending(file) {
+  if (file.size > MAX_FILE_MB * 1048576) return alert(`${file.name} is over ${MAX_FILE_MB} MB.`);
+  pending.push({ file, url: URL.createObjectURL(file) });
+  renderPending();
+}
+function removePending(item) {
+  URL.revokeObjectURL(item.url);
+  pending = pending.filter(p => p !== item);
+  renderPending();
+}
+function clearPending() { pending.forEach(p => URL.revokeObjectURL(p.url)); pending = []; renderPending(); }
+
+function renderPending() {
+  const el = $('#pending');
+  el.classList.toggle('hidden', !pending.length);
+  $('#text').placeholder = pending.length ? 'Add a message (optional)…' : 'Type a message…';
+  el.innerHTML = '';
+  pending.forEach(p => {
+    const t = p.file.type || '';
+    const chip = document.createElement('div'); chip.className = 'chip';
+    const preview = t.startsWith('image/') ? `<img src="${p.url}" alt="">`
+      : t.startsWith('audio/') ? `<audio controls src="${p.url}"></audio>`
+      : '<span style="font-size:24px">📎</span>';
+    const label = t.startsWith('audio/') ? '' : `<div class="nm2"><b>${esc(p.file.name)}</b><span style="color:var(--muted)">${fmtSize(p.file.size)}</span></div>`;
+    chip.innerHTML = `${preview}${label}<button class="x" title="Remove">×</button>`;
+    chip.querySelector('.x').onclick = () => removePending(p);
+    el.appendChild(chip);
+  });
+}
+
+async function sendText() {
+  if (sending || !activeId) return;
+  const rateErr = checkRateLimit();
+  if (rateErr) { showRateLimit(rateErr); return; }
+  const t = $('#text'); const body = t.value.trim();
+  if (!body && !pending.length) return;
+  const cid = activeId;
+  sending = true; $('#send').disabled = true;
+  try {
+    if (!pending.length) {
+      t.value = ''; t.style.height = 'auto';
+      const { data, error } = await sb.from('messages').insert({ conversation_id: cid, sender_id: me.id, body }).select().single();
+      if (error) { t.value = body; return alert(error.message); }
+      recordSend();
+      if (activeId === cid) appendMsg(data);
+    } else {
+      const st = $('#upStatus'); st.classList.remove('hidden');
+      const items = pending.slice();
+      let caption = body;      // the message goes with the first file
+      for (let i = 0; i < items.length; i++) {
+        const rateErr2 = checkRateLimit();
+        if (rateErr2) { showRateLimit(rateErr2); break; }
+        const it = items[i], f = it.file;
+        st.textContent = `Uploading ${f.name} (${i + 1}/${items.length})…`;
+        const safe = f.name.replace(/[^\w.\-]+/g, '_');
+        const path = `${cid}/${crypto.randomUUID()}-${safe}`;
+        const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
+        if (up.error) { alert('Upload failed: ' + up.error.message); break; }
+        const { data, error } = await sb.from('messages').insert({
+          conversation_id: cid, sender_id: me.id, body: caption,
+          file_path: path, file_name: f.name, file_type: f.type, file_size: f.size
+        }).select().single();
+        if (error) { alert(error.message); break; }
+        recordSend();
+        if (caption) { t.value = ''; t.style.height = 'auto'; caption = ''; }
+        removePending(it);
+        if (activeId === cid) appendMsg(data);
+      }
+      st.classList.add('hidden');
+    }
+  } finally { sending = false; $('#send').disabled = false; }
+  bumpConv(cid);
+}
+$('#send').onclick = sendText;
+$('#text').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } };
+$('#text').oninput = e => { const t = e.target; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; };
+
+$('#attach').onclick = () => $('#fileInput').click();
+$('#fileInput').onchange = e => {
+  [...e.target.files].forEach(addPending);
+  e.target.value = '';
+  $('#text').focus();
+};
+
+/* ---------------- VOICE MESSAGES ---------------- */
+let rec = null, recChunks = [], recTimer = null, recCancel = false;
+
+function pickMime() {
+  if (!window.MediaRecorder) return '';
+  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'])
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  return '';
+}
+function stopRec(cancel) { if (!rec) return; recCancel = cancel; rec.stop(); }
+
+$('#recCancel').onclick = () => stopRec(true);
+$('#mic').onclick = async () => {
+  if (rec) return stopRec(false);
+  if (!activeId) return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder)
+    return alert('Voice messages need a browser that supports recording and a secure (https) page.');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { return alert('Microphone access was blocked. Allow it in your browser (the icon next to the address bar) and try again.'); }
+  const mime = pickMime();
+  const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  rec = r; recChunks = []; recCancel = false;
+  r.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+  r.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    clearInterval(recTimer);
+    $('#recBar').classList.add('hidden');
+    $('#mic').textContent = '🎤'; $('#mic').classList.remove('rec');
+    const type = (r.mimeType || mime || 'audio/webm').split(';')[0];
+    const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+    const blob = new Blob(recChunks, { type });
+    rec = null;
+    if (!recCancel && blob.size > 0) addPending(new File([blob], `voice-message.${ext}`, { type }));
+  };
+  r.start();
+  const t0 = Date.now();
+  $('#recTime').textContent = '0:00';
+  recTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    $('#recTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }, 250);
+  $('#recBar').classList.remove('hidden');
+  $('#mic').textContent = '⏹'; $('#mic').classList.add('rec');
+};
+
+/* ---------------- IMAGE VIEWER ---------------- */
+function openLightbox(src, path, name) {
+  const img = $('#lbImg'); img.classList.remove('zoomed'); img.src = src;
+  $('#lbName').textContent = name || '';
+  const dl = $('#lbDl'); dl.href = src; dl.setAttribute('download', name || 'image');
+  $('#lightbox').classList.remove('hidden');
+  sb.storage.from(BUCKET).createSignedUrl(path, 3600, { download: name || true })
+    .then(({ data }) => { if (data) dl.href = data.signedUrl; });
+}
+function closeLightbox() { $('#lightbox').classList.add('hidden'); $('#lbImg').removeAttribute('src'); }
+$('#lbClose').onclick = closeLightbox;
+$('#lightbox').onclick = e => { if (e.target.id === 'lightbox') closeLightbox(); };
+$('#lbImg').onclick = e => { e.stopPropagation(); e.target.classList.toggle('zoomed'); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLightbox(); closeModal(); } });
+
+async function bumpConv(id) { await loadConvs(); if (tab === 'chats') renderChats(); }
+
+/* ---------------- REALTIME ---------------- */
+function subscribe() {
+  if (channel) sb.removeChannel(channel);
+  channel = sb.channel('chat-' + me.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async p => {
+      const m = p.new;
+      if (call && m.conversation_id === call.convId) appendCallMsg(m);
+      if (m.sender_id === me.id && m.conversation_id === activeId) return;
+      if (!getConv(m.conversation_id)) await loadConvs();
+      if (m.conversation_id === activeId) appendMsg(m);
+      else if (m.sender_id !== me.id) unread.add(m.conversation_id);
+      await loadConvs(); if (tab === 'chats') renderChats();
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_members', filter: 'user_id=eq.' + me.id }, async () => {
+      await loadConvs(); if (tab === 'chats') renderChats();
+    })
+    .subscribe();
+}
+
+/* ---------------- MODALS ---------------- */
+function openModal(html) { $('#modal').innerHTML = html; $('#modalWrap').classList.remove('hidden'); }
+function closeModal() { if (modalLocked) return; $('#modalWrap').classList.add('hidden'); $('#modal').innerHTML = ''; }
+$('#modalWrap').onclick = e => { if (e.target.id === 'modalWrap') closeModal(); };
+
+$('#newGroup').onclick = () => {
+  openModal(`<h3>New group</h3>
+    <input type="text" id="gName" placeholder="Group name" maxlength="60">
+    <div style="margin:14px 0 4px;color:var(--muted);font-size:13px">Add people from your contacts</div>
+    ${contacts.length ? contacts.map(c => `<label class="chk"><input type="checkbox" value="${c.id}"> ${esc(c.display_name)} <span style="color:var(--muted)">@${esc(c.username)}</span></label>`).join('')
+      : '<div class="empty">You have no contacts yet. You can create the group now and add people later from the Info button.</div>'}
+    <div class="err" id="gErr"></div>
+    <div class="actions"><button class="btn ghost" id="mCancel">Cancel</button><button class="btn" id="mCreate">Create</button></div>`);
+  $('#mCancel').onclick = closeModal;
+  $('#mCreate').onclick = async () => {
+    const name = $('#gName').value.trim(); if (!name) return $('#gName').focus();
+    const ids = [...document.querySelectorAll('#modal input[type=checkbox]:checked')].map(i => i.value);
+    const btn = $('#mCreate'), gerr = $('#gErr');
+    btn.disabled = true; gerr.textContent = '';
+    try {
+      const { data, error } = await sb.rpc('create_group', { gname: name, members: ids });
+      if (error) throw error;
+      closeModal(); await loadConvs(); setTab('chats'); openConv(data);
+    } catch (ex) {
+      console.error('create_group failed', ex);
+      gerr.textContent = 'Could not create the group: ' + (ex.message || ex.details || JSON.stringify(ex));
+      btn.disabled = false;
+    }
+  };
+};
+
+$('#infoBtn').onclick = () => {
+  const c = getConv(activeId); if (!c) return;
+  const memberIds = new Set(c.conversation_members.map(m => m.user_id));
+  const people = c.conversation_members.map(m => m.profiles).filter(Boolean);
+  const addable = contacts.filter(x => !memberIds.has(x.id));
+  openModal(`${c.is_group ? `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div class="av" style="width:56px;height:56px;font-size:24px;${avStyle(c.avatar_url)}">${avInner(c.avatar_url, convTitle(c))}</div><button class="btn ghost small" id="logoBtn">Change logo</button></div>` : ''}<h3>${esc(convTitle(c))}</h3>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:8px">${c.is_group ? 'Group chat' : 'Direct message'}</div>
+    ${people.map(p => `<div class="row" style="cursor:default;padding-left:0;padding-right:0"><div class="av sm" style="${avStyle(p.avatar_url)}">${avInner(p.avatar_url, p.display_name)}</div><div class="t"><b>${online.has(p.id) ? '🟢' : '⚪'} ${esc(p.display_name)}${p.id === me.id ? ' (you)' : ''}</b><span>@${esc(p.username)}</span></div></div>`).join('')}
+    ${c.is_group && addable.length ? `<div style="margin:14px 0 6px;color:var(--muted);font-size:13px">Add a contact</div>
+      <div style="display:flex;gap:8px"><select id="addSel">${addable.map(x => `<option value="${x.id}">${esc(x.display_name)} (@${esc(x.username)})</option>`).join('')}</select><button class="btn" id="addBtn">Add</button></div>` : ''}
+    <div class="actions">
+      ${c.is_group ? '<button class="btn danger" id="leaveBtn">Leave group</button>' : ''}
+      <button class="btn ghost" id="mClose">Close</button>
+    </div>`);
+  $('#mClose').onclick = closeModal;
+  if ($('#logoBtn')) $('#logoBtn').onclick = () => openAvatarPicker({
+    title: 'Group logo', current: c.avatar_url, name: convTitle(c),
+    onPick: av => setGroupAvatar(c, av),
+    onUpload: async blob => setGroupAvatar(c, await uploadAvatar('groups/' + c.id, blob))
+  });
+  if ($('#addBtn')) $('#addBtn').onclick = async () => {
+    const { error } = await sb.rpc('add_to_group', { cid: c.id, uid: $('#addSel').value });
+    if (error) return alert(error.message);
+    closeModal(); await loadConvs(); openConv(c.id);
+  };
+  if ($('#leaveBtn')) $('#leaveBtn').onclick = async () => {
+    if (!confirm('Leave this group?')) return;
+    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', c.id).eq('user_id', me.id);
+    if (error) return alert(error.message);
+    closeModal(); activeId = null; showChat(false); await loadConvs(); render();
+  };
+};
+
+/* ================================================================
+   PASSWORD RECOVERY (no email: username + secret recovery code)
+   ================================================================ */
+let showCodeAfterStart = false;
+let modalLocked = false;
+
+function showReset(on) {
+  $('#authForm').classList.toggle('hidden', on);
+  $('#resetForm').classList.toggle('hidden', !on);
+  $('#switchRow').classList.toggle('hidden', on);
+  $('#forgotRow').classList.toggle('hidden', on || signupMode);
+  $('#authSub').textContent = on ? 'Reset your password' : 'Sign in to start chatting';
+  $('#authErr').textContent = '';
+}
+$('#forgotLink').onclick = () => showReset(true);
+$('#backToLogin').onclick = () => showReset(false);
+
+$('#resetForm').onsubmit = async e => {
+  e.preventDefault();
+  const err = $('#authErr'); err.className = 'err'; err.textContent = '';
+  const btn = $('#rBtn'); btn.disabled = true;
+  const { data, error } = await sb.rpc('reset_password_with_code', {
+    uname: $('#rUser').value, code: $('#rCode').value, newpass: $('#rPass').value
+  });
+  btn.disabled = false;
+  if (error) { err.textContent = error.message; return; }
+  if (data === 'ok') {
+    $('#rCode').value = ''; $('#rPass').value = '';
+    showReset(false); setMode(false);
+    err.className = 'err ok';
+    err.textContent = 'Password changed! Sign in with your email and the new password, then make a new recovery code from your profile (click your picture).';
+  } else {
+    err.textContent = {
+      bad: 'Wrong username or recovery code.',
+      locked: 'Too many wrong tries. Wait 15 minutes and try again.',
+      short: 'Your new password must be at least 6 characters.'
+    }[data] || 'Something went wrong.';
+  }
+};
+
+async function showRecoveryCode(first) {
+  if (!first && !confirm('This replaces your old recovery code with a new one. Continue?')) return;
+  const { data: code, error } = await sb.rpc('generate_recovery_code');
+  if (error) return alert('Could not make a recovery code: ' + error.message + '\n\nHave you run recovery-setup.sql in Supabase?');
+  modalLocked = true;       // so a stray click or Esc can't close it before it's saved
+  openModal(`<h3>${first ? 'Welcome! ' : ''}Your recovery code</h3>
+    <p style="margin:0 0 12px;color:var(--muted)">If you ever forget your password, this code lets you set a new one without email. It’s shown <b>only once</b>, so save it somewhere safe (a screenshot, your notes, or a password manager). Anyone with your username and this code can take over your account, so keep it private.</p>
+    <div style="font:600 19px/1.3 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px;text-align:center;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;user-select:all">${esc(code)}</div>
+    <div class="actions"><button class="btn ghost" id="rcCopy">Copy</button><button class="btn ghost" id="rcDl">Download</button><button class="btn" id="rcDone">I’ve saved it</button></div>`);
+  $('#rcCopy').onclick = async () => {
+    try { await navigator.clipboard.writeText(code); $('#rcCopy').textContent = 'Copied ✓'; }
+    catch { alert('Couldn’t copy automatically. Select the code and copy it by hand.'); }
+  };
+  $('#rcDl').onclick = () => {
+    const blob = new Blob([`Chatterbox recovery code\nUsername: ${myProfile.username}\nCode: ${code}\n`], { type: 'text/plain' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'chatterbox-recovery-code.txt';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  $('#rcDone').onclick = () => { modalLocked = false; closeModal(); };
+}
+
+function openChangePassword() {
+  openModal(`<h3>Change password</h3>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:4px">New password (at least 6 characters)</div>
+    <input type="password" id="cpNew" autocomplete="new-password" minlength="6">
+    <div class="err" id="cpErr"></div>
+    <div class="actions"><button class="btn ghost" id="cpCancel">Cancel</button><button class="btn" id="cpSave">Save</button></div>`);
+  $('#cpCancel').onclick = closeModal;
+  $('#cpSave').onclick = async () => {
+    const pw = $('#cpNew').value;
+    if (pw.length < 6) { $('#cpErr').textContent = 'Use at least 6 characters.'; return; }
+    $('#cpSave').disabled = true;
+    const { error } = await sb.auth.updateUser({ password: pw });
+    if (error) { $('#cpErr').textContent = error.message; $('#cpSave').disabled = false; return; }
+    closeModal(); alert('Password changed.');
+  };
+}
+
+/* ================================================================
+   AVATARS (profile pictures + group logos)
+   Stored as either "😎|#4f46e5" (a preset) or a file path in the
+   public "avatars" bucket.
+   ================================================================ */
+const PRESETS = ['🦊|#f97316','🐼|#64748b','🐸|#16a34a','🦄|#c026d3','🐙|#e11d48','🐧|#0ea5e9',
+  '🦁|#eab308','🐯|#ea580c','🐨|#78716c','🐵|#a16207','🦉|#7c3aed','🐢|#15803d',
+  '😎|#4f46e5','🤖|#0891b2','👾|#9333ea','👻|#475569','🎮|#2563eb','⚽|#16a34a',
+  '🎵|#db2777','🔥|#dc2626','🚀|#4338ca','🌈|#f59e0b','🍕|#ea580c','⭐|#ca8a04'];
+
+const pubUrl = path => sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+function avBg(a) {
+  if (!a || !a.includes('|')) return '';
+  const c = a.split('|')[1];
+  return /^#[0-9a-f]{6}$/i.test(c) ? c : '';
+}
+const avStyle = a => avBg(a) ? 'background:' + avBg(a) : '';
+function avInner(a, name) {
+  if (!a) return esc(initial(name));
+  if (a.includes('|')) return '<span class="em">' + esc(a.split('|')[0]) + '</span>';
+  return '<img src="' + esc(pubUrl(a)) + '" alt="">';
+}
+function setAv(el, a, name) { el.style.background = avBg(a); el.innerHTML = avInner(a, name); }
+function convAvatar(c) {
+  if (c.is_group) return c.avatar_url || null;
+  return c.conversation_members.find(m => m.user_id !== me.id)?.profiles?.avatar_url || null;
+}
+function refreshHeader() {
+  const c = activeId && getConv(activeId); if (!c) return;
+  $('#chTitle').textContent = convTitle(c); $('#chSub').textContent = convSub(c);
+  setAv($('#chAv'), convAvatar(c), convTitle(c)); $('#chAv').dataset.uid = dmOther(c); refreshOnline();
+}
+
+async function squareBlob(file, size = 256) {
+  const bmp = await createImageBitmap(file);
+  const s = Math.min(bmp.width, bmp.height);
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  cv.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, size, size);
+  return new Promise(res => cv.toBlob(res, 'image/jpeg', 0.85));
+}
+async function uploadAvatar(prefix, blob) {
+  const path = `${prefix}/${Date.now()}.jpg`;
+  const { error } = await sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) { alert('Upload failed: ' + error.message); throw error; }
+  return path;
+}
+
+function openAvatarPicker({ title, current, name, onPick, onUpload }) {
+  openModal(`<h3>${esc(title)}</h3>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px">
+      <div class="av" id="apPrev" style="width:72px;height:72px;font-size:30px"></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn" id="apEdit">🎨 Open picture maker</button>
+        <button class="btn ghost small" id="apUp">Quick upload</button>
+        <button class="btn ghost small" id="apReset">Use a plain initial</button>
+      </div>
+    </div>
+    <input type="file" id="apFile" accept="image/*" class="hidden">
+    <div style="color:var(--muted);font-size:13px">Or pick a preset</div>
+    <div class="pgrid">${PRESETS.map(p => `<button data-av="${p}" style="background:${p.split('|')[1]}" class="${p === current ? 'sel' : ''}"><span class="em">${p.split('|')[0]}</span></button>`).join('')}</div>
+    <div class="actions"><button class="btn ghost" id="apClose">Close</button></div>`);
+  setAv($('#apPrev'), current, name);
+  $('#apClose').onclick = closeModal;
+  const done = async fn => { try { await fn(); closeModal(); } catch (e) { console.warn(e); } };
+  document.querySelectorAll('#modal [data-av]').forEach(b => b.onclick = () => done(() => onPick(b.dataset.av)));
+  $('#apReset').onclick = () => done(() => onPick(null));
+  $('#apUp').onclick = () => $('#apFile').click();
+  $('#apFile').onchange = async e => {
+    const f = e.target.files[0]; if (!f) return;
+    $('#apUp').textContent = 'Uploading…'; $('#apUp').disabled = true;
+    let blob;
+    try { blob = await squareBlob(f); } catch { alert('That image couldn’t be read. Try a JPG or PNG.'); closeModal(); return; }
+    await done(() => onUpload(blob));
+  };
+  $('#apEdit').onclick = () => {
+    closeModal();
+    openAvatarEditor({ title, name, onSave: async blob => { await onUpload(blob); } });
+  };
+}
+
+/* ================================================================
+   AVATAR / PROFILE PICTURE MAKER
+   Canvas editor: add images + text, move, resize, rotate, change
+   colors, then export a square JPEG for Supabase avatars.
+   ================================================================ */
+function openAvatarEditor({ title, name, onSave }) {
+  const SIZE = 512;
+  let layers = []; // { type:'img'|'text', img?, text?, x, y, scale, rot, color, size, font }
+  let selected = -1;
+  let drag = null; // { mode:'move'|'scale', ox, oy, start… }
+
+  openModal(`<h3>${esc(title || 'Picture maker')}</h3>
+    <div id="avEditor">
+      <div id="avCanvasWrap"><canvas id="avCanvas" width="${SIZE}" height="${SIZE}"></canvas></div>
+      <div class="avTools">
+        <button class="btn small" id="aeAddImg">+ Image</button>
+        <button class="btn small" id="aeAddTxt">+ Text</button>
+        <button class="btn ghost small" id="aeDel" disabled>Delete</button>
+        <input type="file" id="aeFile" accept="image/*" class="hidden">
+      </div>
+      <div class="avTools" id="aeImgTools" style="display:none">
+        <label>Size <input type="range" id="aeScale" min="5" max="300" value="100"></label>
+        <label>Rotate <input type="range" id="aeRot" min="0" max="360" value="0"></label>
+      </div>
+      <div class="avTools" id="aeTxtTools" style="display:none">
+        <input type="text" id="aeText" placeholder="Your text…" style="flex:1;min-width:120px">
+        <label>Size <input type="range" id="aeFont" min="12" max="120" value="48"></label>
+        <input type="color" id="aeColor" value="#ffffff" title="Text color">
+        <select id="aeFontFam" style="width:auto">
+          <option value="system-ui">Sans</option>
+          <option value="Georgia,serif">Serif</option>
+          <option value="ui-monospace,monospace">Mono</option>
+          <option value="Impact,sans-serif">Impact</option>
+        </select>
+      </div>
+      <div class="avLayerList" id="aeLayers"></div>
+      <div class="avTools">
+        <label>Background <input type="color" id="aeBg" value="#4f46e5"></label>
+        <button class="btn ghost small" id="aeClear">Clear all</button>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="aeCancel">Cancel</button>
+      <button class="btn" id="aeSave">Save picture</button>
+    </div>`);
+
+  const canvas = $('#avCanvas');
+  const ctx = canvas.getContext('2d');
+  const wrap = $('#avCanvasWrap');
+
+  function draw() {
+    const bg = $('#aeBg').value;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    layers.forEach((L, i) => {
+      ctx.save();
+      ctx.translate(L.x, L.y);
+      ctx.rotate((L.rot || 0) * Math.PI / 180);
+      ctx.scale(L.scale || 1, L.scale || 1);
+      if (L.type === 'img' && L.img) {
+        const w = L.img.width, h = L.img.height;
+        ctx.drawImage(L.img, -w / 2, -h / 2);
+      } else if (L.type === 'text') {
+        ctx.font = `bold ${L.size || 48}px ${L.font || 'system-ui'}`;
+        ctx.fillStyle = L.color || '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(L.text || '', 0, 0);
+      }
+      ctx.restore();
+      if (i === selected) {
+        // selection outline
+        ctx.save();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        const r = 40 * (L.scale || 1);
+        ctx.strokeRect(L.x - r, L.y - r, r * 2, r * 2);
+        ctx.restore();
+      }
+    });
+  }
+
+  function renderLayers() {
+    const el = $('#aeLayers');
+    if (!layers.length) { el.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:13px">No layers yet. Add an image or text.</div>'; return; }
+    el.innerHTML = layers.map((L, i) => `<div class="avLayer ${i === selected ? 'on' : ''}" data-i="${i}">
+      ${L.type === 'img' ? '🖼️ Image' : '🔤 ' + esc((L.text || 'Text').slice(0, 20))}
+      <button class="x" data-del="${i}">×</button>
+    </div>`).join('');
+    el.querySelectorAll('.avLayer').forEach(r => r.onclick = e => {
+      if (e.target.dataset.del != null) return;
+      select(+r.dataset.i);
+    });
+    el.querySelectorAll('[data-del]').forEach(b => b.onclick = e => {
+      e.stopPropagation();
+      layers.splice(+b.dataset.del, 1);
+      selected = -1; updateTools(); draw(); renderLayers();
+    });
+  }
+
+  function select(i) {
+    selected = i;
+    updateTools();
+    renderLayers();
+    draw();
+  }
+
+  function updateTools() {
+    const L = layers[selected];
+    $('#aeDel').disabled = selected < 0;
+    $('#aeImgTools').style.display = L?.type === 'img' ? 'flex' : 'none';
+    $('#aeTxtTools').style.display = L?.type === 'text' ? 'flex' : 'none';
+    if (L?.type === 'img') {
+      $('#aeScale').value = Math.round((L.scale || 1) * 100);
+      $('#aeRot').value = L.rot || 0;
+    }
+    if (L?.type === 'text') {
+      $('#aeText').value = L.text || '';
+      $('#aeFont').value = L.size || 48;
+      $('#aeColor').value = L.color || '#ffffff';
+      $('#aeFontFam').value = L.font || 'system-ui';
+    }
+  }
+
+  $('#aeAddImg').onclick = () => $('#aeFile').click();
+  $('#aeFile').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      const bmp = await createImageBitmap(f);
+      // scale down large images so they fit
+      const max = 400;
+      let w = bmp.width, h = bmp.height;
+      if (w > max || h > max) {
+        const r = Math.min(max / w, max / h);
+        w = Math.round(w * r); h = Math.round(h * r);
+      }
+      const off = document.createElement('canvas');
+      off.width = w; off.height = h;
+      off.getContext('2d').drawImage(bmp, 0, 0, w, h);
+      const img = new Image();
+      img.src = off.toDataURL('image/png');
+      await new Promise(r => { img.onload = r; });
+      layers.push({ type: 'img', img, x: SIZE / 2, y: SIZE / 2, scale: 1, rot: 0 });
+      select(layers.length - 1);
+      renderLayers();
+    } catch { alert('Couldn’t load that image.'); }
+  };
+
+  $('#aeAddTxt').onclick = () => {
+    layers.push({ type: 'text', text: name || 'Hello', x: SIZE / 2, y: SIZE / 2, scale: 1, rot: 0, size: 48, color: '#ffffff', font: 'system-ui' });
+    select(layers.length - 1);
+    renderLayers();
+  };
+
+  $('#aeDel').onclick = () => {
+    if (selected < 0) return;
+    layers.splice(selected, 1);
+    selected = -1; updateTools(); draw(); renderLayers();
+  };
+
+  $('#aeScale').oninput = () => { if (selected >= 0 && layers[selected].type === 'img') { layers[selected].scale = +$('#aeScale').value / 100; draw(); } };
+  $('#aeRot').oninput = () => { if (selected >= 0) { layers[selected].rot = +$('#aeRot').value; draw(); } };
+  $('#aeText').oninput = () => { if (selected >= 0 && layers[selected].type === 'text') { layers[selected].text = $('#aeText').value; draw(); renderLayers(); } };
+  $('#aeFont').oninput = () => { if (selected >= 0 && layers[selected].type === 'text') { layers[selected].size = +$('#aeFont').value; draw(); } };
+  $('#aeColor').oninput = () => { if (selected >= 0 && layers[selected].type === 'text') { layers[selected].color = $('#aeColor').value; draw(); } };
+  $('#aeFontFam').onchange = () => { if (selected >= 0 && layers[selected].type === 'text') { layers[selected].font = $('#aeFontFam').value; draw(); } };
+  $('#aeBg').oninput = draw;
+  $('#aeClear').onclick = () => { if (confirm('Clear all layers?')) { layers = []; selected = -1; updateTools(); draw(); renderLayers(); } };
+
+  // pointer drag to move / resize selected layer
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    const scale = SIZE / r.width;
+    const cx = (e.clientX ?? e.touches?.[0]?.clientX) - r.left;
+    const cy = (e.clientY ?? e.touches?.[0]?.clientY) - r.top;
+    return { x: cx * scale, y: cy * scale };
+  }
+  function hit(p) {
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const L = layers[i];
+      const dx = p.x - L.x, dy = p.y - L.y;
+      const r = 50 * (L.scale || 1);
+      if (dx * dx + dy * dy < r * r) return i;
+    }
+    return -1;
+  }
+  function onDown(e) {
+    e.preventDefault();
+    const p = pos(e);
+    const i = hit(p);
+    if (i >= 0) {
+      select(i);
+      drag = { mode: 'move', ox: p.x - layers[i].x, oy: p.y - layers[i].y };
+    } else {
+      selected = -1; updateTools(); draw(); renderLayers();
+    }
+  }
+  function onMove(e) {
+    if (!drag || selected < 0) return;
+    e.preventDefault();
+    const p = pos(e);
+    layers[selected].x = p.x - drag.ox;
+    layers[selected].y = p.y - drag.oy;
+    draw();
+  }
+  function onUp() { drag = null; }
+  canvas.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+
+  $('#aeCancel').onclick = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    closeModal();
+  };
+  $('#aeSave').onclick = async () => {
+    selected = -1; draw(); // hide selection
+    canvas.toBlob(async blob => {
+      if (!blob) return alert('Couldn’t export image.');
+      $('#aeSave').disabled = true; $('#aeSave').textContent = 'Saving…';
+      try {
+        await onSave(blob);
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        closeModal();
+      } catch (e) {
+        alert(e.message || 'Save failed');
+        $('#aeSave').disabled = false; $('#aeSave').textContent = 'Save picture';
+      }
+    }, 'image/jpeg', 0.9);
+  };
+
+  // start with a simple text layer of the name
+  layers.push({ type: 'text', text: (name || 'Me').slice(0, 12), x: SIZE / 2, y: SIZE / 2, scale: 1, rot: 0, size: 64, color: '#ffffff', font: 'system-ui' });
+  select(0);
+  renderLayers();
+  draw();
+}
+
+async function setMyAvatar(av) {
+  const old = myProfile.avatar_url;
+  const { error } = await sb.from('profiles').update({ avatar_url: av }).eq('id', me.id);
+  if (error) { alert(error.message); throw error; }
+  myProfile.avatar_url = av; profiles[me.id] = myProfile;
+  setAv($('#meAv'), av, myProfile.display_name);
+  if (old && !old.includes('|') && old !== av) sb.storage.from('avatars').remove([old]);
+  await loadConvs(); render(); refreshHeader();
+}
+async function setGroupAvatar(c, av) {
+  const { error } = await sb.rpc('set_group_avatar', { cid: c.id, av });
+  if (error) { alert(error.message); throw error; }
+  if (c.avatar_url && !c.avatar_url.includes('|') && c.avatar_url !== av) sb.storage.from('avatars').remove([c.avatar_url]);
+  await loadConvs(); render(); refreshHeader();
+}
+
+$('#meAv').onclick = () => {
+  openModal(`<h3>Your profile</h3>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+      <div class="av" id="pfAv" style="width:72px;height:72px;font-size:30px"></div>
+      <button class="btn ghost" id="pfPic">Change picture</button>
+    </div>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:4px">Display name</div>
+    <input type="text" id="pfName" maxlength="40" value="${esc(myProfile.display_name)}">
+    <div style="color:var(--muted);font-size:13px;margin-top:8px">Username: @${esc(myProfile.username)}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn ghost small" id="pfCode">New recovery code</button><button class="btn ghost small" id="pfPass">Change password</button></div>
+    <div class="actions"><button class="btn ghost" id="pfClose">Close</button><button class="btn" id="pfSave">Save name</button></div>`);
+  setAv($('#pfAv'), myProfile.avatar_url, myProfile.display_name);
+  $('#pfClose').onclick = closeModal;
+  $('#pfCode').onclick = () => showRecoveryCode(false);
+  $('#pfPass').onclick = openChangePassword;
+  $('#pfPic').onclick = () => openAvatarPicker({
+    title: 'Profile picture', current: myProfile.avatar_url, name: myProfile.display_name,
+    onPick: av => setMyAvatar(av),
+    onUpload: async blob => setMyAvatar(await uploadAvatar('users/' + me.id, blob))
+  });
+  $('#pfSave').onclick = async () => {
+    const dn = $('#pfName').value.trim(); if (!dn) return $('#pfName').focus();
+    const { error } = await sb.from('profiles').update({ display_name: dn }).eq('id', me.id);
+    if (error) return alert(error.message);
+    myProfile.display_name = dn; profiles[me.id] = myProfile;
+    $('#meName').textContent = dn; setAv($('#meAv'), myProfile.avatar_url, dn);
+    closeModal();
+  };
+};
+
+/* ================================================================
+   ONLINE STATUS (who is on right now)
+   ================================================================ */
+let online = new Set();
+let presenceCh = null;
+
+function dmOther(c) { return c.is_group ? '' : (c.conversation_members.find(m => m.user_id !== me.id)?.user_id || ''); }
+function refreshOnline() {
+  document.querySelectorAll('.av[data-uid]').forEach(e => e.classList.toggle('online', !!e.dataset.uid && online.has(e.dataset.uid)));
+}
+function startPresence() {
+  stopPresence();
+  presenceCh = sb.channel('lobby', { config: { presence: { key: me.id } } });
+  presenceCh.on('presence', { event: 'sync' }, () => {
+    online = new Set(Object.keys(presenceCh.presenceState()));
+    if (tab === 'chats') renderChats();
+    refreshOnline();
+    const c = activeId && getConv(activeId); if (c) $('#chSub').textContent = convSub(c);
+    if (call) renderCallPeople();
+  }).subscribe(async status => { if (status === 'SUBSCRIBED') await presenceCh.track({ at: Date.now() }); });
+}
+function stopPresence() { if (presenceCh) { sb.removeChannel(presenceCh); presenceCh = null; } online = new Set(); }
+
+/* ================================================================
+   VOICE + VIDEO CALLS (WebRTC, everyone connects to everyone)
+   Works well for up to ~5 people. Only people with the site open
+   ("online") can be rung.
+   To make calls work on strict networks (school wifi, some mobile
+   data) add a TURN server to this list.
+   ================================================================ */
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' }
+  // , { urls: 'turn:YOUR-TURN-SERVER:3478', username: '...', credential: '...' }
+];
+
+let sigCh = null, call = null, incoming = null;
+let ac = null, ringIv = null;
+const others = c => (getConv(c.convId)?.conversation_members || []).map(m => m.user_id).filter(u => u !== me.id);
+const nameFor = u => profiles[u]?.display_name || 'Someone';
+
+/* ---- ringtone ---- */
+document.addEventListener('pointerdown', () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch {} }, { once: true });
+function startRing() {
+  stopRing();
+  const beep = () => {
+    if (!ac) return;
+    [0, .35].forEach((d, i) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = i ? 520 : 440; o.connect(g); g.connect(ac.destination);
+      const t = ac.currentTime + d;
+      g.gain.setValueAtTime(.15, t); g.gain.setValueAtTime(0, t + .3);
+      o.start(t); o.stop(t + .32);
+    });
+  };
+  beep(); ringIv = setInterval(beep, 2200);
+  try { navigator.vibrate?.([300, 200, 300]); } catch {}
+}
+function stopRing() { clearInterval(ringIv); ringIv = null; }
+
+/* ---- signalling over the call_signals table ---- */
+function startSignals() {
+  if (sigCh) sb.removeChannel(sigCh);
+  sigCh = sb.channel('signals-' + me.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_signals', filter: 'to_user=eq.' + me.id }, p => handleSignal(p.new))
+    .subscribe();
+}
+async function sendSignals(c, toUsers, type, payload = {}) {
+  if (!toUsers.length) return;
+  const rows = toUsers.map(u => ({ conversation_id: c.convId, call_id: c.id, from_user: me.id, to_user: u, type, payload }));
+  const { error } = await sb.from('call_signals').insert(rows);
+  if (error) console.warn('call signal failed:', error.message);
+}
+function stopCalls() { hangUp(true); dismissIncoming(); if (sigCh) { sb.removeChannel(sigCh); sigCh = null; } stopPresence(); }
+
+async function handleSignal(s) {
+  const p = s.payload || {}, from = s.from_user;
+  if (s.type === 'ring') return onRing(s);
+  if (incoming && incoming.callId === s.call_id && s.type === 'leave') return dismissIncoming();
+  if (!call || call.id !== s.call_id) return;
+  const group = getConv(call.convId)?.is_group;
+  switch (s.type) {
+    case 'hello': call.status[from] = 'joined'; if (!call.peers[from]) await callPeer(from); break;
+    case 'offer': call.status[from] = 'joined'; await onOffer(from, p.sdp); break;
+    case 'answer': await onAnswer(from, p.sdp); break;
+    case 'ice': addIce(from, p.c); break;
+    case 'state': call.state[from] = p; updateTile(from); break;
+    case 'decline': call.status[from] = 'declined'; if (!group) endAfter(nameFor(from) + ' declined'); break;
+    case 'busy': call.status[from] = 'busy'; if (!group) endAfter(nameFor(from) + ' is busy'); break;
+    case 'leave': closePeer(from); call.status[from] = 'left'; if (!group) endAfter('Call ended'); break;
+  }
+  if (call) renderCallPeople();
+}
+
+/* ---- incoming ring ---- */
+function onRing(s) {
+  const p = s.payload || {};
+  if (call && call.id === s.call_id) return;
+  if (call || incoming) {
+    if (!(incoming && incoming.callId === s.call_id)) sendSignals({ id: s.call_id, convId: s.conversation_id }, [s.from_user], 'busy');
+    return;
+  }
+  incoming = { callId: s.call_id, convId: s.conversation_id, from: s.from_user, kind: p.kind || 'audio' };
+  setAv($('#inAv'), profiles[s.from_user]?.avatar_url, p.fromName);
+  $('#inTitle').textContent = (p.fromName || 'Someone') + ' is calling…';
+  $('#inSub').textContent = (p.kind === 'video' ? 'Video call' : 'Voice call') + (p.title ? ' · ' + p.title : '');
+  $('#incoming').classList.remove('hidden');
+  startRing();
+  incoming.timer = setTimeout(dismissIncoming, 45000);
+}
+function dismissIncoming() {
+  if (incoming) clearTimeout(incoming.timer);
+  incoming = null; stopRing();
+  $('#incoming').classList.add('hidden');
+}
+$('#inAccept').onclick = async () => {
+  const inc = incoming; if (!inc) return;
+  dismissIncoming();
+  if (!getConv(inc.convId)) await loadConvs();
+  if (!getConv(inc.convId)) return;
+  joinCall(inc.callId, inc.convId, inc.kind, false);
+};
+$('#inDecline').onclick = () => {
+  const inc = incoming; if (!inc) return;
+  dismissIncoming();
+  sendSignals({ id: inc.callId, convId: inc.convId }, [inc.from], 'decline');
+};
+
+/* ---- starting a call ---- */
+$('#callVoice').onclick = () => preCall('audio');
+$('#callVideo').onclick = () => preCall('video');
+
+function preCall(kind) {
+  if (!activeId) return;
+  if (call || incoming) return alert('You are already in a call.');
+  const c = getConv(activeId), ids = others({ convId: c.id });
+  const onl = ids.filter(u => online.has(u));
+  openModal(`<h3>${kind === 'video' ? 'Video' : 'Voice'} call · ${esc(convTitle(c))}</h3>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:8px">Only people who are online right now can be rung.</div>
+    ${ids.map(u => `<div class="chk">${online.has(u) ? '🟢' : '⚪'} <b>${esc(nameFor(u))}</b> <span style="color:var(--muted)">${online.has(u) ? 'online, will be rung' : 'offline, can’t be rung'}</span></div>`).join('')}
+    ${onl.length ? '' : '<div class="empty" style="padding:14px 0 0">Nobody here is online right now.</div>'}
+    <div class="actions"><button class="btn ghost" id="pcCancel">Cancel</button>${onl.length ? `<button class="btn" id="pcStart">Call ${onl.length} online</button>` : ''}</div>`);
+  $('#pcCancel').onclick = closeModal;
+  if (onl.length) $('#pcStart').onclick = () => { closeModal(); beginCall(kind, c.id); };
+}
+
+async function beginCall(kind, convId) {
+  const ids = others({ convId });
+  if (!(await joinCall(crypto.randomUUID(), convId, kind, true))) return;
+  ids.forEach(u => { call.status[u] = 'offline'; });
+  ringMembers(ids.filter(u => online.has(u)));
+}
+
+function ringMembers(uids) {
+  const c = call, conv = getConv(c.convId);
+  uids.forEach(u => {
+    c.status[u] = 'ringing';
+    setTimeout(() => {
+      if (call !== c || c.status[u] !== 'ringing') return;
+      c.status[u] = 'no answer'; renderCallPeople();
+      if (!conv.is_group && !Object.keys(c.peers).length) endAfter('No answer');
+    }, 45000);
+  });
+  sendSignals(c, uids, 'ring', { kind: c.kind, fromName: myProfile.display_name, title: conv.is_group ? convTitle(conv) : '' });
+  renderCallPeople();
+}
+
+async function joinCall(id, convId, kind, host) {
+  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
+    alert('Calls need a browser that supports them and a secure (https) page.'); return false;
+  }
+  let local = null;
+  try { local = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === 'video' ? { facingMode: 'user' } : false }); }
+  catch {
+    if (kind === 'video') {
+      try { local = await navigator.mediaDevices.getUserMedia({ audio: true }); alert('Couldn’t use your camera, so you’re joining with audio only.'); } catch {}
+    }
+  }
+  if (!local) { alert('Couldn’t use your microphone. Allow access in the browser (icon next to the address bar) and try again.'); return false; }
+
+  const conv = getConv(convId);
+  call = { id, convId, kind, local, peers: {}, pendingIce: {}, status: {}, state: {}, started: Date.now(), timer: null, screenTrack: null, camTrack: null };
+  call.camTrack = local.getVideoTracks()[0] || null;
+  const hasVid = !!call.camTrack;
+  $('#callTitle').textContent = convTitle(conv);
+  $('#callGrid').innerHTML = '';
+  $('#localVideo').srcObject = local;
+  $('#localVideo').classList.remove('novid');
+  $('#localVideo').classList.toggle('mirror', hasVid);
+  setAv($('#localBig'), myProfile.avatar_url, myProfile.display_name);
+  $('#localTile').classList.toggle('hidden', !hasVid);
+  $('#cCam').classList.toggle('hidden', !hasVid);
+  $('#cMic').classList.remove('off'); $('#cMic').textContent = '🎤';
+  $('#cCam').classList.remove('off');
+  $('#cShare').classList.remove('on'); $('#cShare').textContent = '🖥️';
+  $('#callTimer').textContent = '0:00';
+  $('#callChat').classList.remove('open');
+  $('#callMsgs').innerHTML = '';
+  $('#callText').value = '';
+  loadCallChat(convId);
+  $('#call').classList.remove('hidden');
+  call.timer = setInterval(() => {
+    if (!call) return;
+    const s = Math.floor((Date.now() - call.started) / 1000);
+    $('#callTimer').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }, 1000);
+  renderCallPeople();
+  if (!host) sendSignals(call, others(call), 'hello');
+  return true;
+}
+
+/* ---- peer connections ---- */
+const micOn = () => call?.local.getAudioTracks()[0]?.enabled !== false;
+const camOn = () => { const t = call?.local.getVideoTracks()[0]; return !!t && t.enabled; };
+const sharing = () => !!call?.screenTrack;
+
+function makePeer(uid) {
+  const c = call;
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  const peer = { pc, polite: me.id > uid };
+  c.peers[uid] = peer;
+  c.local.getTracks().forEach(t => pc.addTrack(t, c.local));
+  pc.onicecandidate = e => { if (e.candidate && call === c) sendSignals(c, [uid], 'ice', { c: e.candidate.toJSON() }); };
+  pc.ontrack = e => {
+    const t = ensureTile(uid);
+    if (t.video.srcObject !== e.streams[0]) t.video.srcObject = e.streams[0];
+    t.video.play().catch(() => {});
+    updateTile(uid);
+  };
+  pc.onconnectionstatechange = () => {
+    if (call !== c) return;
+    const st = pc.connectionState;
+    if (st === 'connected') { c.status[uid] = 'joined'; sendSignals(c, [uid], 'state', { cam: camOn(), mic: micOn(), share: sharing() }); }
+    if (st === 'failed' || st === 'closed') { closePeer(uid); c.status[uid] = 'connection failed'; }
+    renderCallPeople();
+  };
+  ensureTile(uid);
+  return peer;
+}
+
+async function replaceVideoTrack(track) {
+  if (!call) return;
+  for (const p of Object.values(call.peers)) {
+    const sender = p.pc.getSenders().find(s => s.track && s.track.kind === 'video');
+    if (sender) {
+      try { await sender.replaceTrack(track); } catch (e) { console.warn('replaceTrack', e); }
+    } else if (track) {
+      p.pc.addTrack(track, call.local);
+    }
+  }
+  // update local stream
+  const old = call.local.getVideoTracks()[0];
+  if (old && old !== track) {
+    call.local.removeTrack(old);
+    if (old !== call.camTrack && old !== call.screenTrack) old.stop();
+  }
+  if (track && !call.local.getVideoTracks().includes(track)) call.local.addTrack(track);
+  $('#localVideo').srcObject = call.local;
+  $('#localVideo').classList.toggle('novid', !track);
+  $('#localVideo').classList.toggle('mirror', track === call.camTrack);
+  $('#localTile').classList.toggle('hidden', !track);
+}
+async function callPeer(uid) {
+  const c = call, p = c.peers[uid] || makePeer(uid);
+  try {
+    const offer = await p.pc.createOffer();
+    await p.pc.setLocalDescription(offer);
+    await sendSignals(c, [uid], 'offer', { sdp: { type: offer.type, sdp: offer.sdp } });
+  } catch (e) { console.warn(e); }
+}
+async function onOffer(from, sdp) {
+  const c = call, p = c.peers[from] || makePeer(from), pc = p.pc;
+  try {
+    if (pc.signalingState !== 'stable' && !p.polite) return;      // glare: the other side wins
+    await pc.setRemoteDescription(sdp);
+    await flushIce(from);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await sendSignals(c, [from], 'answer', { sdp: { type: answer.type, sdp: answer.sdp } });
+  } catch (e) { console.warn(e); }
+}
+async function onAnswer(from, sdp) {
+  const p = call.peers[from];
+  if (!p || p.pc.signalingState !== 'have-local-offer') return;
+  try { await p.pc.setRemoteDescription(sdp); await flushIce(from); } catch (e) { console.warn(e); }
+}
+function addIce(uid, cand) {
+  const p = call.peers[uid];
+  if (p && p.pc.remoteDescription) p.pc.addIceCandidate(cand).catch(() => {});
+  else (call.pendingIce[uid] = call.pendingIce[uid] || []).push(cand);
+}
+async function flushIce(uid) {
+  const p = call.peers[uid], list = call.pendingIce[uid] || [];
+  call.pendingIce[uid] = [];
+  for (const c of list) { try { await p.pc.addIceCandidate(c); } catch {} }
+}
+function closePeer(uid) {
+  const p = call?.peers[uid];
+  if (p) { try { p.pc.close(); } catch {} delete call.peers[uid]; }
+  document.getElementById('tile-' + uid)?.remove();
+}
+
+/* ---- call screen ---- */
+function ensureTile(uid) {
+  let el = document.getElementById('tile-' + uid);
+  if (!el) {
+    el = document.createElement('div'); el.className = 'tile'; el.id = 'tile-' + uid;
+    el.innerHTML = `<div class="big" style="${avStyle(profiles[uid]?.avatar_url)}">${avInner(profiles[uid]?.avatar_url, nameFor(uid))}</div><video autoplay playsinline class="novid"></video><span class="lbl">${esc(nameFor(uid))}</span>`;
+    $('#callGrid').appendChild(el);
+  }
+  return { el, video: el.querySelector('video') };
+}
+function updateTile(uid) {
+  const el = document.getElementById('tile-' + uid); if (!el || !call) return;
+  const v = el.querySelector('video'), s = v.srcObject;
+  const st = call.state[uid] || {};
+  const hasVid = s && s.getVideoTracks().length > 0 && st.cam !== false;
+  v.classList.toggle('novid', !hasVid);
+  let label = nameFor(uid);
+  if (st.share) label += ' 🖥️';
+  else if (st.mic === false) label += ' 🔇';
+  el.querySelector('.lbl').textContent = label;
+}
+function renderCallPeople() {
+  if (!call) return;
+  const labels = { joined: 'in call', ringing: 'ringing…', declined: 'declined', busy: 'busy', 'no answer': 'no answer', left: 'left', 'connection failed': 'connection failed' };
+  $('#callPeople').innerHTML = others(call).map(u => {
+    const s = call.status[u];
+    const label = labels[s] || (online.has(u) ? 'online' : 'offline');
+    const canRing = online.has(u) && s !== 'joined' && s !== 'ringing';
+    return `<span class="pchip">${online.has(u) ? '🟢' : '⚪'} ${esc(nameFor(u))} · ${label}${canRing ? ` <button data-ring="${u}">Ring</button>` : ''}</span>`;
+  }).join('');
+  $('#callPeople').querySelectorAll('[data-ring]').forEach(b => b.onclick = () => ringMembers([b.dataset.ring]));
+}
+function broadcastState() { if (call) sendSignals(call, Object.keys(call.peers), 'state', { cam: camOn(), mic: micOn(), share: sharing() }); }
+$('#cMic').onclick = () => {
+  const t = call?.local.getAudioTracks()[0]; if (!t) return;
+  t.enabled = !t.enabled;
+  $('#cMic').classList.toggle('off', !t.enabled); $('#cMic').textContent = t.enabled ? '🎤' : '🔇';
+  broadcastState();
+};
+$('#cCam').onclick = () => {
+  if (sharing()) return; // can't toggle cam while sharing screen
+  const t = call?.local.getVideoTracks()[0]; if (!t) return;
+  t.enabled = !t.enabled;
+  $('#cCam').classList.toggle('off', !t.enabled);
+  $('#localVideo').classList.toggle('novid', !t.enabled);
+  broadcastState();
+};
+$('#cShare').onclick = async () => {
+  if (!call) return;
+  if (sharing()) {
+    // stop sharing → restore camera if available
+    call.screenTrack?.stop();
+    call.screenTrack = null;
+    $('#cShare').classList.remove('on'); $('#cShare').textContent = '🖥️';
+    await replaceVideoTrack(call.camTrack && call.camTrack.readyState === 'live' ? call.camTrack : null);
+    broadcastState();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const track = stream.getVideoTracks()[0];
+    if (!track) return;
+    call.screenTrack = track;
+    track.onended = () => {
+      if (call && call.screenTrack === track) {
+        call.screenTrack = null;
+        $('#cShare').classList.remove('on'); $('#cShare').textContent = '🖥️';
+        replaceVideoTrack(call.camTrack && call.camTrack.readyState === 'live' ? call.camTrack : null);
+        broadcastState();
+      }
+    };
+    $('#cShare').classList.add('on'); $('#cShare').textContent = '🖥️';
+    await replaceVideoTrack(track);
+    broadcastState();
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') console.warn(e);
+  }
+};
+$('#cEnd').onclick = () => hangUp();
+
+function endAfter(msg) {
+  if (!call) return;
+  const c = call; $('#callTitle').textContent = msg;
+  setTimeout(() => { if (call === c) hangUp(); }, 1500);
+}
+async function hangUp(quiet = false) {
+  const c = call; if (!c) return;
+  call = null;
+  clearInterval(c.timer);
+  Object.values(c.peers).forEach(p => { try { p.pc.close(); } catch {} });
+  c.screenTrack?.stop();
+  c.local.getTracks().forEach(t => t.stop());
+  if (c.camTrack && c.camTrack.readyState !== 'ended') try { c.camTrack.stop(); } catch {}
+  $('#call').classList.add('hidden');
+  $('#callGrid').innerHTML = '';
+  $('#localVideo').srcObject = null;
+  $('#callChat').classList.remove('open');
+  if (quiet) return;
+  await sendSignals(c, others(c), 'leave');
+  await sb.from('call_signals').delete().eq('call_id', c.id).or(`from_user.eq.${me.id},to_user.eq.${me.id}`);
+}
+
+/* ---- call chat ---- */
+async function loadCallChat(cid) {
+  const box = $('#callMsgs');
+  box.innerHTML = '';
+  const { data } = await sb.from('messages').select('*').eq('conversation_id', cid).order('created_at', { ascending: false }).limit(40);
+  if (!call || call.convId !== cid) return;
+  (data || []).reverse().forEach(m => appendCallMsg(m));
+  box.scrollTop = box.scrollHeight;
+}
+function appendCallMsg(m) {
+  if (document.querySelector(`#callMsgs [data-mid="${m.id}"]`)) return;
+  const mine = m.sender_id === me.id;
+  const name = !mine ? (profiles[m.sender_id]?.display_name || '…') : '';
+  const div = document.createElement('div');
+  div.className = 'msg' + (mine ? ' me' : '');
+  div.dataset.mid = m.id;
+  div.innerHTML = `${name ? `<div class="nm">${esc(name)}</div>` : ''}${m.body ? `<div class="tx">${esc(m.body)}</div>` : (m.file_name ? `<div class="tx">📎 ${esc(m.file_name)}</div>` : '')}<div class="tm">${fmtTime(m.created_at)}</div>`;
+  $('#callMsgs').appendChild(div);
+  const box = $('#callMsgs');
+  if (box.scrollHeight - box.scrollTop - box.clientHeight < 80) box.scrollTop = box.scrollHeight;
+  if (!$('#callChat').classList.contains('open') && !mine) $('#callChatToggle').classList.add('has-new');
+}
+$('#callChatToggle').onclick = () => {
+  const open = $('#callChat').classList.toggle('open');
+  if (open) { $('#callChatToggle').classList.remove('has-new'); $('#callText').focus(); }
+};
+$('#callChatClose').onclick = () => $('#callChat').classList.remove('open');
+$('#callSend').onclick = async () => {
+  if (!call) return;
+  const rateErr = checkRateLimit();
+  if (rateErr) { showRateLimit(rateErr); return; }
+  const t = $('#callText'); const body = t.value.trim();
+  if (!body) return;
+  t.value = '';
+  const { data, error } = await sb.from('messages').insert({ conversation_id: call.convId, sender_id: me.id, body }).select().single();
+  if (error) { t.value = body; return alert(error.message); }
+  recordSend();
+  appendCallMsg(data);
+  if (activeId === call.convId) appendMsg(data);
+  bumpConv(call.convId);
+};
+$('#callText').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#callSend').click(); } };
+</script>
+</body>
+</html>
