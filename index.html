@@ -568,9 +568,9 @@ async function openConv(id) {
   showChat(true);
   render();
   $('#msgs').innerHTML = ''; lastDay = '';
-  const { data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true }).limit(300);
+  const { data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(300);   // newest 300...
   if (activeId !== id) return;
-  for (const m of data || []) await appendMsg(m, false);
+  for (const m of (data || []).reverse()) await appendMsg(m, false);          // ...shown oldest-first
   scrollDown();
 }
 
