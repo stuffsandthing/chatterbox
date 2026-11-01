@@ -70,7 +70,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 .msg.me{background:var(--me);color:var(--me-text);align-self:flex-end}
 .msg .nm{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:2px}
 .msg .tx{white-space:pre-wrap}
-.msg .tm{font-size:11px;opacity:.65;margin-top:3px;text-align:right}
+.msg .tm{font-size:11px;opacity:.65;margin-top:3px;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.msg .del-msg{background:none;border:0;padding:0 2px;font-size:12px;opacity:.55;cursor:pointer;line-height:1}
+.msg .del-msg:hover{opacity:1}
+.msg.me .del-msg{filter:brightness(2)}
 .msg img{max-width:100%;max-height:300px;border-radius:8px;display:block;margin-bottom:4px}
 .msg a.file{display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none;background:rgba(0,0,0,.08);padding:8px 10px;border-radius:8px}
 .daysep{align-self:center;color:var(--muted);font-size:12px;margin:8px 0}
@@ -322,6 +325,37 @@ const MAX_FILE_MB = 25;
 const MAX_LINES = 10;      // longest message you can send, in lines
 const MAX_CHARS = 1000;    // ...and in characters
 const BUCKET = 'chat-files';
+
+/* ---- swear / cuss word filter (blocks messages containing these) ---- */
+const BAD_WORDS = [
+  'fuck','fucker','fucking','fucked','fucks','motherfucker','mf','mofo',
+  'shit','shitty','bullshit','shithead',
+  'ass','asshole','asses','arse','arsehole',
+  'bitch','bitches','bitchy',
+  'cunt','cunts',
+  'dick','dicks','dickhead','cock','cocks','cockhead',
+  'pussy','pussies',
+  'bastard','bastards',
+  'damn','dammit','goddamn',
+  'hell','hells',
+  'crap','crappy',
+  'piss','pissed','pissing',
+  'whore','whores','slut','sluts','slutty',
+  'nigger','nigga','fag','faggot','retard','retarded',
+  'twat','wanker','tosser','bollocks','bugger'
+];
+const BAD_RE = new RegExp('\\b(' + BAD_WORDS.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b', 'i');
+function containsBadWords(text) {
+  if (!text) return false;
+  return BAD_RE.test(String(text));
+}
+function cleanOrBlock(text) {
+  if (containsBadWords(text)) {
+    alert('Your message contains blocked language. Please rephrase without swear or cuss words.');
+    return null;
+  }
+  return text;
+}
 /* ================================================================ */
 
 const $ = s => document.querySelector(s);
@@ -595,11 +629,16 @@ async function appendMsg(m, scroll = true) {
       ? `<img data-path="${esc(m.file_path)}" data-name="${esc(m.file_name)}" alt="${esc(m.file_name)}" style="cursor:zoom-in">`
       : `<a class="file" data-path="${esc(m.file_path)}" data-dl="${esc(m.file_name)}" href="#">📎 <span>${esc(m.file_name)}<br><small>${fmtSize(m.file_size || 0)}</small></span></a>`;
   }
+  const delBtn = mine ? `<button class="del-msg" title="Delete your message" data-mid="${m.id}">🗑️</button>` : '';
   const div = document.createElement('div');
   div.className = 'msg' + (mine ? ' me' : '');
   div.dataset.mid = m.id;
-  div.innerHTML = `${name}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="tm">${fmtTime(m.created_at)}</div>`;
+  div.innerHTML = `${name}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="tm">${fmtTime(m.created_at)}${delBtn}</div>`;
   box.appendChild(div);
+  if (mine) {
+    const btn = div.querySelector('.del-msg');
+    if (btn) btn.onclick = (e) => { e.stopPropagation(); deleteOwnMessage(m.id, m.file_path); };
+  }
   div.querySelectorAll('[data-path]').forEach(async el => {
     const dl = el.dataset.dl ? { download: el.dataset.dl } : undefined;
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(el.dataset.path, 3600, dl);
@@ -609,6 +648,20 @@ async function appendMsg(m, scroll = true) {
     else el.href = data.signedUrl;
   });
   if (scroll) scrollDown();
+}
+
+async function deleteOwnMessage(id, filePath) {
+  if (!confirm('Delete this message? It will be removed for everyone.')) return;
+  const { error } = await sb.from('messages').delete().eq('id', id).eq('sender_id', me.id);
+  if (error) return alert('Could not delete: ' + error.message + '\n\nMake sure your Supabase RLS policy allows deleting your own messages.');
+  // remove from UI immediately
+  document.querySelectorAll(`[data-mid="${id}"]`).forEach(el => el.remove());
+  // optionally remove the file from storage
+  if (filePath) {
+    try { await sb.storage.from(BUCKET).remove([filePath]); } catch (_) {}
+  }
+  // also remove from in-call chat if present
+  document.querySelectorAll(`#ccMsgs [data-id="${id}"]`).forEach(el => el.remove());
 }
 
 let pending = [];   // staged files: { file, url }
@@ -646,8 +699,13 @@ function renderPending() {
 
 async function sendText() {
   if (sending || !activeId) return;
-  const t = $('#text'); const body = t.value.trim();
+  const t = $('#text'); let body = t.value.trim();
   if (!body && !pending.length) return;
+  // Block swear / cuss words
+  if (body) {
+    body = cleanOrBlock(body);
+    if (body === null) return;
+  }
   const cid = activeId;
   sending = true; $('#send').disabled = true;
   try {
@@ -775,6 +833,12 @@ function subscribe() {
       if (m.conversation_id === activeId) appendMsg(m);
       else if (m.sender_id !== me.id) unread.add(m.conversation_id);
       await loadConvs(); if (tab === 'chats') renderChats();
+    })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, p => {
+      const id = p.old?.id;
+      if (!id) return;
+      document.querySelectorAll(`[data-mid="${id}"]`).forEach(el => el.remove());
+      document.querySelectorAll(`#ccMsgs [data-id="${id}"]`).forEach(el => el.remove());
     })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_members', filter: 'user_id=eq.' + me.id }, async () => {
       await loadConvs(); if (tab === 'chats') renderChats();
@@ -1609,8 +1673,11 @@ function callChatAdd(m, quiet) {
   if (!quiet && !mine && $('#callChat').classList.contains('hidden')) { ccUnread++; updateBadge(); }
 }
 async function sendCallMsg() {
-  const t = $('#ccText'), body = clampText(t.value).trim();
+  const t = $('#ccText');
+  let body = clampText(t.value).trim();
   if (!body || !call) return;
+  body = cleanOrBlock(body);
+  if (body === null) return;
   const c = call;
   t.value = '';
   const { data, error } = await sb.from('messages').insert({ conversation_id: c.convId, sender_id: me.id, body }).select().single();
