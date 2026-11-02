@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Chatterbox</title>
-<meta name="theme-color" content="#4f46e5">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%234f46e5'/%3E%3Cpath d='M14 16h36a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H30l-10 9v-9h-6a4 4 0 0 1-4-4V20a4 4 0 0 1 4-4z' fill='white'/%3E%3Ccircle cx='23' cy='30' r='3' fill='%234f46e5'/%3E%3Ccircle cx='32' cy='30' r='3' fill='%234f46e5'/%3E%3Ccircle cx='41' cy='30' r='3' fill='%234f46e5'/%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--bg:#f4f5f7;--panel:#fff;--text:#1c1e21;--muted:#6b7280;--line:#e5e7eb;--accent:#4f46e5;--accent-text:#fff;--me:#4f46e5;--me-text:#fff;--other:#eceef2;--danger:#dc2626}
@@ -70,112 +68,14 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 .msg.me{background:var(--me);color:var(--me-text);align-self:flex-end}
 .msg .nm{font-size:12px;font-weight:600;color:var(--accent);margin-bottom:2px}
 .msg .tx{white-space:pre-wrap}
-.msg .tm{font-size:11px;opacity:.65;margin-top:3px;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:6px}
-.msg .del-msg{background:none;border:0;padding:0 2px;font-size:12px;opacity:.55;cursor:pointer;line-height:1}
-.msg .del-msg:hover{opacity:1}
-.msg.me .del-msg{filter:brightness(2)}
+.msg .tm{font-size:11px;opacity:.65;margin-top:3px;text-align:right}
 .msg img{max-width:100%;max-height:300px;border-radius:8px;display:block;margin-bottom:4px}
 .msg a.file{display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none;background:rgba(0,0,0,.08);padding:8px 10px;border-radius:8px}
 .daysep{align-self:center;color:var(--muted);font-size:12px;margin:8px 0}
 #composer{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;background:var(--panel);border-top:1px solid var(--line)}
-#composer textarea{resize:none;max-height:230px;min-height:40px}
-#limitNote{font-size:12px;padding:3px 14px;background:var(--panel);color:var(--muted)}
+#composer textarea{resize:none;max-height:140px;min-height:40px}
 #upStatus{font-size:13px;color:var(--muted);padding:4px 14px;background:var(--panel)}
 #noChat{flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);padding:20px;text-align:center}
-
-/* avatars */
-.av img,.big img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
-.em{font-size:1.35em;line-height:1}
-#meAv{cursor:pointer}
-.pgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:10px 0}
-.pgrid button{aspect-ratio:1;border-radius:50%;border:2px solid transparent;padding:0;display:flex;align-items:center;justify-content:center}
-.pgrid button.sel{border-color:var(--text)}
-
-/* online / offline dots + calls */
-.av{position:relative}
-.av.online::after,.av.offline::after{content:'';position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;border:2px solid var(--panel)}
-.av.online::after{background:#22c55e}
-.av.offline::after{background:#ef4444}
-.av.sm.online::after,.av.sm.offline::after{width:10px;height:10px}
-#incoming{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
-.inbox{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;text-align:center;width:100%;max-width:320px}
-.inbox .av{width:72px;height:72px;font-size:30px;margin:0 auto 12px;animation:pulse 1.4s infinite}
-@keyframes pulse{50%{transform:scale(1.08)}}
-#inTitle{font-size:18px;font-weight:600}
-#inSub{color:var(--muted);margin:4px 0 18px}
-.inbtns{display:flex;gap:10px;justify-content:center}
-#call{position:fixed;inset:0;background:#0b0d11;z-index:40;display:flex;flex-direction:column;color:#fff}
-#callTop{display:flex;justify-content:space-between;align-items:center;padding:12px 16px}
-#callPeople{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 8px;font-size:12px}
-.pchip{background:rgba(255,255,255,.12);border-radius:999px;padding:3px 10px;display:flex;gap:6px;align-items:center}
-.pchip button{background:#4f46e5;color:#fff;border:0;border-radius:999px;padding:1px 9px;font-size:12px}
-#callGrid{flex:1;min-height:0;display:grid;gap:8px;padding:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));grid-auto-rows:1fr}
-#callGrid:empty{display:flex;align-items:center;justify-content:center}
-#callGrid:empty::before{content:'Waiting for others to join…';color:#9aa0aa}
-.tile{position:relative;background:#1b1f27;border-radius:14px;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:0}
-.tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.tile video.novid{opacity:0}
-.tile .big{width:84px;height:84px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:600}
-.tile .lbl{position:absolute;left:10px;bottom:8px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:6px;font-size:12px;z-index:1}
-.tile.local{position:absolute;right:14px;bottom:96px;width:min(200px,38vw);height:calc(min(200px,38vw) * 9 / 16);z-index:2;border:2px solid rgba(255,255,255,.3)}
-.tile.local video{transform:scaleX(-1)}
-.tile.local .big{width:40px;height:40px;font-size:18px}
-#callBar{display:flex;gap:14px;justify-content:center;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom))}
-.cbtn{width:56px;height:56px;border-radius:50%;border:0;background:rgba(255,255,255,.15);color:#fff;font-size:22px}
-.cbtn.off{background:#fff;color:#000}
-.cbtn.end{background:#dc2626;width:auto;border-radius:28px;padding:0 22px;font-size:16px}
-
-/* screen sharing */
-#callGrid{overflow:auto}
-.tile.screen{grid-column:1/-1;min-height:55vh;background:#000}
-.tile.screen video{object-fit:contain}
-.tile .fsb{position:absolute;right:10px;bottom:8px;z-index:1;background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:6px;padding:2px 8px}
-#shareBar{display:flex;align-items:center;justify-content:center;gap:10px;background:#16a34a;color:#fff;padding:6px 12px;font-size:13px}
-.cbtn.sharing{background:#16a34a}
-
-/* in-call chat */
-.cbtn{position:relative}
-.cbtn .badge{position:absolute;top:-2px;right:-2px;background:#dc2626;color:#fff;border-radius:999px;font-size:11px;min-width:18px;height:18px;line-height:18px;padding:0 4px;font-weight:600}
-#callChat{position:fixed;right:14px;top:70px;width:min(320px,92vw);height:min(360px,50vh);z-index:6;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;box-shadow:0 8px 30px rgba(0,0,0,.5);overflow:hidden}
-#ccHead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg);cursor:grab;touch-action:none;user-select:none}
-#ccHead button{background:none;border:0;color:var(--muted);font-size:16px;padding:0 4px}
-#ccMsgs{flex:1;min-height:0;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px}
-.ccm{max-width:85%;padding:5px 9px;border-radius:10px;background:var(--other);align-self:flex-start;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap}
-.ccm.me{background:var(--me);color:var(--me-text);align-self:flex-end}
-.ccm .n{font-size:11px;font-weight:600;color:var(--accent);display:block}
-#ccForm{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);align-items:flex-end}
-#ccForm textarea{flex:1;width:auto;resize:none;max-height:80px;min-height:34px;padding:6px 10px}
-
-/* staged files + voice */
-#pending{display:flex;gap:8px;overflow-x:auto;padding:8px 12px;background:var(--panel);border-top:1px solid var(--line)}
-.chip{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 8px;flex:none;max-width:300px}
-.chip img{width:44px;height:44px;object-fit:cover;border-radius:6px}
-.chip audio{height:34px;width:200px}
-.chip .nm2{min-width:0;font-size:12px}
-.chip .nm2 b{display:block;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chip .x{background:none;border:0;font-size:20px;line-height:1;color:var(--muted);padding:0 4px}
-#recBar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line);color:var(--danger)}
-.recdot{width:10px;height:10px;border-radius:50%;background:var(--danger);animation:blink 1s infinite}
-@keyframes blink{50%{opacity:.2}}
-#mic.rec{background:var(--danger);color:#fff;border-color:var(--danger)}
-.msg audio{width:260px;max-width:100%;display:block;margin-bottom:4px}
-
-/* image viewer */
-#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:30;display:flex;overflow:auto;padding:64px 12px 12px}
-#lbImg{margin:auto;max-width:100%;max-height:calc(100vh - 80px);object-fit:contain;cursor:zoom-in}
-#lbImg.zoomed{max-width:none;max-height:none;cursor:zoom-out}
-.lbBar{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;align-items:center;padding:10px 12px;background:rgba(0,0,0,.65);color:#fff;z-index:31}
-.lbBar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lbBar a.btn{text-decoration:none}
-
-/* picture maker */
-.mkrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}
-.sw{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);padding:0}
-.emo{font-size:20px;background:none;border:0;padding:2px 4px;line-height:1}
-#mkCv{width:100%;max-width:300px;display:block;margin:0 auto 8px;border-radius:12px;touch-action:none;background:#000;cursor:grab}
-#mkLayer{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
-#mkLayer .lbl2{font-size:12px;color:var(--muted);margin-top:8px}
-#mkLayer input[type=range]{width:100%}
 
 /* modal */
 #modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
@@ -215,19 +115,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
       <input type="password" id="password" autocomplete="current-password" required minlength="6">
       <button class="btn" id="authBtn" type="submit">Sign in</button>
     </form>
-    <form id="resetForm" class="hidden">
-      <label for="rUser">Username</label>
-      <input type="text" id="rUser" autocapitalize="none" autocomplete="username">
-      <label for="rCode">Recovery code</label>
-      <input type="text" id="rCode" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocapitalize="characters" autocomplete="off">
-      <label for="rPass">New password</label>
-      <input type="password" id="rPass" autocomplete="new-password" minlength="6">
-      <button class="btn" type="submit" id="rBtn">Reset password</button>
-      <div class="switch"><a id="backToLogin">Back to sign in</a></div>
-    </form>
     <div class="err" id="authErr"></div>
-    <div class="switch" id="switchRow"><span id="switchTxt">No account?</span> <a id="switchLink">Sign up</a></div>
-    <div class="switch" id="forgotRow"><a id="forgotLink">Forgot password?</a></div>
+    <div class="switch"><span id="switchTxt">No account?</span> <a id="switchLink">Sign up</a></div>
   </div>
 </div>
 
@@ -250,66 +139,23 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 
   <section id="main">
     <div id="noChat">Pick a chat or find someone in People to start talking.</div>
-    <div id="chatView" style="display:none;flex-direction:column;flex:1;min-height:0">
+    <div id="chatView" class="hidden" style="display:none;flex-direction:column;flex:1;min-height:0">
       <div id="chatHead">
         <button class="btn ghost small" id="back">←</button>
         <div class="av sm" id="chAv"></div>
         <div class="t"><b id="chTitle"></b><span id="chSub"></span></div>
-        <button class="btn ghost small" id="callVoice" title="Voice call">📞</button>
-        <button class="btn ghost small" id="callVideo" title="Video call">🎥</button>
         <button class="btn ghost small" id="infoBtn">Info</button>
       </div>
       <div id="msgs"></div>
       <div id="upStatus" class="hidden"></div>
-      <div id="limitNote" class="hidden"></div>
-      <div id="pending" class="hidden"></div>
-      <div id="recBar" class="hidden"><span class="recdot"></span><span>Recording… <b id="recTime">0:00</b></span><button class="btn ghost small" id="recCancel" style="margin-left:auto">Cancel</button></div>
       <div id="composer">
-        <button class="btn ghost" id="attach" title="Attach a file">📎</button>
-        <button class="btn ghost" id="mic" title="Record a voice message">🎤</button>
+        <button class="btn ghost" id="attach" title="Send a file">📎</button>
         <input type="file" id="fileInput" multiple class="hidden">
         <textarea id="text" rows="1" placeholder="Type a message…"></textarea>
         <button class="btn" id="send">Send</button>
       </div>
     </div>
   </section>
-</div>
-
-<div id="incoming" class="hidden">
-  <div class="inbox">
-    <div class="av" id="inAv"></div>
-    <div id="inTitle"></div>
-    <div id="inSub"></div>
-    <div class="inbtns">
-      <button class="btn danger" id="inDecline">Decline</button>
-      <button class="btn" id="inAccept" style="background:#16a34a">Accept</button>
-    </div>
-  </div>
-</div>
-
-<div id="call" class="hidden">
-  <div id="callTop"><b id="callTitle"></b><span id="callTimer">0:00</span></div>
-  <div id="callPeople"></div>
-  <div id="shareBar" class="hidden"><span>🖥️ You’re sharing your screen</span><button class="btn danger small" id="shareStop">Stop sharing</button></div>
-  <div id="callGrid"></div>
-  <div id="callChat" class="hidden">
-    <div id="ccHead"><b>💬 Chat</b><button id="ccClose" title="Hide chat">✕</button></div>
-    <div id="ccMsgs"></div>
-    <div id="ccForm"><textarea id="ccText" rows="1" placeholder="Message…"></textarea><button class="btn small" id="ccSend">Send</button></div>
-  </div>
-  <div class="tile local" id="localTile"><div class="big" id="localBig"></div><video id="localVideo" autoplay playsinline muted></video><span class="lbl">You</span></div>
-  <div id="callBar">
-    <button class="cbtn" id="cMic" title="Mute / unmute">🎤</button>
-    <button class="cbtn" id="cCam" title="Camera on / off">📷</button>
-    <button class="cbtn" id="cShare" title="Share your screen">🖥️</button>
-    <button class="cbtn" id="cChat" title="Chat during the call">💬<span class="badge hidden" id="ccBadge"></span></button>
-    <button class="cbtn end" id="cEnd">End call</button>
-  </div>
-</div>
-
-<div id="lightbox" class="hidden">
-  <div class="lbBar"><span id="lbName"></span><a class="btn small" id="lbDl" href="#">⬇ Download</a><button class="btn ghost small" id="lbClose" style="color:#fff">✕ Close</button></div>
-  <img id="lbImg" alt="">
 </div>
 
 <div id="modalWrap" class="hidden"><div id="modal"></div></div>
@@ -324,73 +170,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 const SUPABASE_URL = 'https://cylppnwhdeqaflktoyya.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHBwbndoZGVxYWZsa3RveXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzNzk1NzEsImV4cCI6MjEwODk1NTU3MX0.Tqaa7Ny4C64s5SKLFEui_jX_7d3lIADfATtyvUPuK_U';
 const MAX_FILE_MB = 25;
-const MAX_LINES = 10;      // longest message you can send, in lines
-const MAX_CHARS = 1000;    // ...and in characters
 const BUCKET = 'chat-files';
-
-/* ---- swear / cuss word filter ---- */
-// Original list + words from swear.txt (including slang / masked forms)
-const BAD_WORDS = [
-  // original list
-  'fuck','fucker','fucking','fucked','fucks','motherfucker','mf','mofo',
-  'shit','shitty','bullshit','shithead',
-  'ass','asshole','asses','arse','arsehole',
-  'bitch','bitches','bitchy',
-  'cunt','cunts',
-  'dick','dicks','dickhead','cock','cocks','cockhead',
-  'pussy','pussies',
-  'bastard','bastards',
-  'damn','dammit','goddamn',
-  'hell','hells',
-  'crap','crappy',
-  'piss','pissed','pissing',
-  'whore','whores','slut','sluts','slutty',
-  'nigger','nigga','fag','faggot','retard','retarded',
-  'twat','wanker','tosser','bollocks','bugger',
-  // from swear.txt
-  'sh*t','sh**','s*it','*hit','f*ck','assh*le','s_h_i_t',
-  'sybau','tfym','syfm','nga','stfu','idgaf','idgas'
-];
-
-// Filter version — open the browser console, you should see this if the new file loaded:
-console.log('[Chatterbox] swear filter v3 + last-seen loaded');
-
-// Turn a word into a regex that allows repeated letters and simple masks.
-// "damn" → /d+a+m+n+/i  matches "daamn", "daaaammmnnn", etc.
-function wordToFlexRegex(w) {
-  const chars = w.toLowerCase().split('');
-  let pat = '';
-  for (const ch of chars) {
-    if (ch === '*' || ch === '_') pat += '.?';
-    else if (/[a-z0-9]/.test(ch)) pat += ch + '+';
-    else pat += '\\' + ch;
-  }
-  return pat;
-}
-const BAD_FLEX_RE = new RegExp(
-  '(?:^|[^a-z0-9])(' + BAD_WORDS.map(wordToFlexRegex).join('|') + ')(?=[^a-z0-9]|$)', 'i'
-);
-
-function containsBadWords(text) {
-  if (!text) return false;
-  const raw = String(text);
-  if (BAD_FLEX_RE.test(raw)) return true;
-  // strip spaces + mask chars so "f u c k", "f.ck", "d a a m n" are caught
-  const stripped = raw.replace(/[\s.*_\-]/g, '');
-  if (BAD_FLEX_RE.test(stripped)) return true;
-  // collapsed-letter safety net
-  const collapsed = stripped.replace(/(.)\1+/gi, '$1');
-  if (collapsed.length >= 2 && BAD_FLEX_RE.test(collapsed)) return true;
-  return false;
-}
-
-function cleanOrBlock(text) {
-  if (containsBadWords(text)) {
-    alert('Your message contains blocked language. Please rephrase without swear or cuss words.');
-    return null;
-  }
-  return text;
-}
 /* ================================================================ */
 
 const $ = s => document.querySelector(s);
@@ -427,7 +207,6 @@ function setMode(su) {
   $('#switchTxt').textContent = su ? 'Already have an account?' : 'No account?';
   $('#switchLink').textContent = su ? 'Sign in' : 'Sign up';
   $('#password').autocomplete = su ? 'new-password' : 'current-password';
-  $('#forgotRow').classList.toggle('hidden', su);
   $('#authErr').textContent = '';
 }
 $('#switchLink').onclick = () => setMode(!signupMode);
@@ -446,10 +225,6 @@ $('#authForm').onsubmit = async e => {
       if (free === false) throw new Error('That username is taken.');
       const { data, error } = await sb.auth.signUp({ email, password, options: { data: { username, display_name } } });
       if (error) throw error;
-      if (data.session) {
-        showCodeAfterStart = true;
-        if (myProfile && !$('#app').classList.contains('hidden')) { showCodeAfterStart = false; showRecoveryCode(true); }
-      }
       if (!data.session) { err.className = 'err ok'; err.textContent = 'Account created! Check your email to confirm, then sign in.'; setMode(false); err.className='err ok'; err.textContent='Account created! Check your email to confirm, then sign in.'; }
     } else {
       const { error } = await sb.auth.signInWithPassword({ email, password });
@@ -478,19 +253,15 @@ async function startApp(user) {
   myProfile = p; profiles[p.id] = p;
   $('#auth').classList.add('hidden');
   $('#app').classList.remove('hidden');
-  setAv($('#meAv'), p.avatar_url, p.display_name); $('#meAv').title = 'Edit your profile';
+  $('#meAv').textContent = initial(p.display_name);
   $('#meName').textContent = p.display_name;
   $('#meUser').textContent = '@' + p.username;
   await Promise.all([loadContacts(), loadConvs()]);
   render();
   subscribe();
-  startPresence();
-  startSignals();
-  if (showCodeAfterStart) { showCodeAfterStart = false; showRecoveryCode(true); }
 }
 
 function stopApp() {
-  stopCalls();
   if (channel) { sb.removeChannel(channel); channel = null; }
   me = null; myProfile = null; convs = []; contacts = []; activeId = null; profiles = {}; unread.clear();
   $('#app').classList.add('hidden'); $('#app').classList.remove('show-chat');
@@ -501,7 +272,7 @@ function stopApp() {
 
 /* ---------------- DATA ---------------- */
 async function loadContacts() {
-  const { data } = await sb.from('contacts').select('contact_id, profiles:contact_id(id,username,display_name,avatar_url)').eq('owner_id', me.id);
+  const { data } = await sb.from('contacts').select('contact_id, profiles:contact_id(id,username,display_name)').eq('owner_id', me.id);
   contacts = (data || []).map(r => r.profiles).filter(Boolean).sort((a,b) => a.display_name.localeCompare(b.display_name));
   contactIds = new Set(contacts.map(c => c.id));
   contacts.forEach(c => profiles[c.id] = c);
@@ -512,7 +283,7 @@ async function loadConvs() {
   const ids = (mem || []).map(m => m.conversation_id);
   if (!ids.length) { convs = []; return; }
   const { data } = await sb.from('conversations')
-    .select('*, conversation_members(user_id, profiles(id,username,display_name,avatar_url))')
+    .select('*, conversation_members(user_id, profiles(id,username,display_name))')
     .in('id', ids).order('last_message_at', { ascending: false });
   convs = data || [];
   convs.forEach(c => c.conversation_members.forEach(m => { if (m.profiles) profiles[m.profiles.id] = m.profiles; }));
@@ -524,39 +295,10 @@ function convTitle(c) {
   const o = c.conversation_members.find(m => m.user_id !== me.id);
   return o?.profiles?.display_name || 'Chat';
 }
-function fmtLastSeen(ts) {
-  if (!ts) return 'offline';
-  const t = new Date(ts).getTime();
-  if (!t || isNaN(t)) return 'offline';
-  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (sec < 60) return 'last seen just now';
-  if (sec < 3600) {
-    const m = Math.floor(sec / 60);
-    return 'last seen ' + m + (m === 1 ? ' min ago' : ' mins ago');
-  }
-  if (sec < 86400) {
-    const h = Math.floor(sec / 3600);
-    return 'last seen ' + h + (h === 1 ? ' hour ago' : ' hours ago');
-  }
-  if (sec < 86400 * 7) {
-    const d = Math.floor(sec / 86400);
-    return 'last seen ' + d + (d === 1 ? ' day ago' : ' days ago');
-  }
-  return 'last seen ' + new Date(ts).toLocaleDateString([], { day: 'numeric', month: 'short' });
-}
-
 function convSub(c) {
-  if (c.is_group) {
-    const k = c.conversation_members.filter(m => m.user_id !== me.id && online.has(m.user_id)).length;
-    return c.conversation_members.length + ' members · ' + k + ' online';
-  }
+  if (c.is_group) return c.conversation_members.length + ' members';
   const o = c.conversation_members.find(m => m.user_id !== me.id);
-  if (!o?.profiles) return '';
-  const handle = '@' + o.profiles.username;
-  if (online.has(o.user_id)) return handle + ' · online';
-  // offline — show last seen from profile cache if we have it
-  const last = o.profiles.last_seen || profiles[o.user_id]?.last_seen;
-  return handle + ' · ' + fmtLastSeen(last);
+  return o?.profiles ? '@' + o.profiles.username : '';
 }
 async function nameOf(id) {
   if (profiles[id]) return profiles[id];
@@ -584,29 +326,23 @@ function renderChats() {
   if (!convs.length) { el.innerHTML = '<div class="empty">No chats yet.<br>Go to <b>People</b> to find someone, or make a group.</div>'; return; }
   el.innerHTML = convs.map(c => `
     <div class="row ${c.id === activeId ? 'on' : ''} ${unread.has(c.id) ? 'unread' : ''}" data-id="${c.id}">
-      <div class="av" data-uid="${dmOther(c)}" style="${avStyle(convAvatar(c))}">${avInner(convAvatar(c), convTitle(c))}</div>
+      <div class="av">${esc(initial(convTitle(c)))}</div>
       <div class="t"><b>${esc(convTitle(c))}</b><span>${c.is_group ? 'Group · ' : ''}${esc(convSub(c))}</span></div>
       ${unread.has(c.id) ? '<div class="dot"></div>' : ''}
     </div>`).join('');
   el.querySelectorAll('.row').forEach(r => r.onclick = () => openConv(r.dataset.id));
-  refreshOnline();
 }
 
 let searchTimer;
 $('#search').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderPeople, 250); };
 
-let peopleSeq = 0;
 async function renderPeople() {
   const el = $('#list');
   const q = $('#search').value.trim().replace(/[%,()]/g, '');
   let people, heading = '';
-  const mySeq = ++peopleSeq;
   if (q.length >= 2) {
-    const qq = q.replace(/\*/g, '');
-    const { data, error } = await sb.from('profiles').select('id,username,display_name,avatar_url')
-      .or(`username.ilike.*${qq}*,display_name.ilike.*${qq}*`).neq('id', me.id).limit(25);
-    if (mySeq !== peopleSeq) return;          // a newer search replaced this one
-    if (error) { console.error('search failed', error); el.innerHTML = '<div class="empty">Search failed: ' + esc(error.message) + '</div>'; return; }
+    const { data } = await sb.from('profiles').select('id,username,display_name')
+      .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`).neq('id', me.id).limit(25);
     people = data || [];
     heading = '<div class="empty" style="padding:10px 14px;text-align:left">Search results</div>';
     if (!people.length) { el.innerHTML = '<div class="empty">Nobody found for “' + esc(q) + '”.</div>'; return; }
@@ -618,14 +354,13 @@ async function renderPeople() {
   people.forEach(p => profiles[p.id] = p);
   el.innerHTML = heading + people.map(p => `
     <div class="row" style="cursor:default">
-      <div class="av" data-uid="${p.id}" style="${avStyle(p.avatar_url)}">${avInner(p.avatar_url, p.display_name)}</div>
+      <div class="av">${esc(initial(p.display_name))}</div>
       <div class="t"><b>${esc(p.display_name)}</b><span>@${esc(p.username)}</span></div>
       <button class="btn small" data-chat="${p.id}">Chat</button>
       <button class="btn ghost small" data-toggle="${p.id}">${contactIds.has(p.id) ? 'Remove' : 'Add'}</button>
     </div>`).join('');
   el.querySelectorAll('[data-chat]').forEach(b => b.onclick = () => startDM(b.dataset.chat));
   el.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => toggleContact(b.dataset.toggle));
-  refreshOnline();
 }
 
 async function toggleContact(id) {
@@ -652,32 +387,17 @@ $('#back').onclick = () => { activeId = null; showChat(false); render(); };
 
 async function openConv(id) {
   activeId = id; unread.delete(id);
-  stopRec(true); clearPending();
   const c = getConv(id);
   if (!c) return;
-  // refresh the other person's profile so last_seen is up to date
-  const otherId = dmOther(c);
-  if (otherId && !online.has(otherId)) {
-    try {
-      const { data: p } = await sb.from('profiles').select('*').eq('id', otherId).maybeSingle();
-      if (p) {
-        profiles[p.id] = p;
-        const mem = c.conversation_members.find(m => m.user_id === otherId);
-        if (mem) mem.profiles = p;
-      }
-    } catch (_) {}
-  }
   $('#chTitle').textContent = convTitle(c);
   $('#chSub').textContent = convSub(c);
-  setAv($('#chAv'), convAvatar(c), convTitle(c));
-  $('#chAv').dataset.uid = otherId || '';
-  refreshOnline();
+  $('#chAv').textContent = initial(convTitle(c));
   showChat(true);
   render();
   $('#msgs').innerHTML = ''; lastDay = '';
-  const { data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(300);   // newest 300...
+  const { data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true }).limit(300);
   if (activeId !== id) return;
-  for (const m of (data || []).reverse()) await appendMsg(m, false);          // ...shown oldest-first
+  for (const m of data || []) await appendMsg(m, false);
   scrollDown();
 }
 
@@ -695,202 +415,60 @@ async function appendMsg(m, scroll = true) {
   let file = '';
   if (m.file_path) {
     const isImg = (m.file_type || '').startsWith('image/');
-    const isAud = (m.file_type || '').startsWith('audio/');
-    file = isAud
-      ? `<audio controls preload="metadata" data-path="${esc(m.file_path)}"></audio>`
-      : isImg
-      ? `<img data-path="${esc(m.file_path)}" data-name="${esc(m.file_name)}" alt="${esc(m.file_name)}" style="cursor:zoom-in">`
+    file = isImg
+      ? `<img data-path="${esc(m.file_path)}" alt="${esc(m.file_name)}" style="cursor:zoom-in">`
       : `<a class="file" data-path="${esc(m.file_path)}" data-dl="${esc(m.file_name)}" href="#">📎 <span>${esc(m.file_name)}<br><small>${fmtSize(m.file_size || 0)}</small></span></a>`;
   }
-  const delBtn = mine ? `<button class="del-msg" title="Delete your message" data-mid="${m.id}">🗑️</button>` : '';
   const div = document.createElement('div');
   div.className = 'msg' + (mine ? ' me' : '');
   div.dataset.mid = m.id;
-  div.innerHTML = `${name}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="tm">${fmtTime(m.created_at)}${delBtn}</div>`;
+  div.innerHTML = `${name}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="tm">${fmtTime(m.created_at)}</div>`;
   box.appendChild(div);
-  if (mine) {
-    const btn = div.querySelector('.del-msg');
-    if (btn) btn.onclick = (e) => { e.stopPropagation(); deleteOwnMessage(m.id, m.file_path); };
-  }
   div.querySelectorAll('[data-path]').forEach(async el => {
     const dl = el.dataset.dl ? { download: el.dataset.dl } : undefined;
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(el.dataset.path, 3600, dl);
     if (!data) return;
-    if (el.tagName === 'IMG') { el.src = data.signedUrl; el.onclick = () => openLightbox(data.signedUrl, el.dataset.path, el.dataset.name); el.onload = () => { if (scroll) scrollDown(); }; }
-    else if (el.tagName === 'AUDIO') el.src = data.signedUrl;
+    if (el.tagName === 'IMG') { el.src = data.signedUrl; el.onclick = () => window.open(data.signedUrl, '_blank'); el.onload = () => { if (scroll) scrollDown(); }; }
     else el.href = data.signedUrl;
   });
   if (scroll) scrollDown();
 }
 
-async function deleteOwnMessage(id, filePath) {
-  if (!confirm('Delete this message? It will be removed for everyone.')) return;
-  const { error } = await sb.from('messages').delete().eq('id', id).eq('sender_id', me.id);
-  if (error) return alert('Could not delete: ' + error.message + '\n\nMake sure your Supabase RLS policy allows deleting your own messages.');
-  // remove from UI immediately
-  document.querySelectorAll(`[data-mid="${id}"]`).forEach(el => el.remove());
-  // optionally remove the file from storage
-  if (filePath) {
-    try { await sb.storage.from(BUCKET).remove([filePath]); } catch (_) {}
-  }
-  // also remove from in-call chat if present
-  document.querySelectorAll(`#ccMsgs [data-id="${id}"]`).forEach(el => el.remove());
-}
-
-let pending = [];   // staged files: { file, url }
-let sending = false;
-
-function addPending(file) {
-  if (file.size > MAX_FILE_MB * 1048576) return alert(`${file.name} is over ${MAX_FILE_MB} MB.`);
-  pending.push({ file, url: URL.createObjectURL(file) });
-  renderPending();
-}
-function removePending(item) {
-  URL.revokeObjectURL(item.url);
-  pending = pending.filter(p => p !== item);
-  renderPending();
-}
-function clearPending() { pending.forEach(p => URL.revokeObjectURL(p.url)); pending = []; renderPending(); }
-
-function renderPending() {
-  const el = $('#pending');
-  el.classList.toggle('hidden', !pending.length);
-  $('#text').placeholder = pending.length ? 'Add a message (optional)…' : 'Type a message…';
-  el.innerHTML = '';
-  pending.forEach(p => {
-    const t = p.file.type || '';
-    const chip = document.createElement('div'); chip.className = 'chip';
-    const preview = t.startsWith('image/') ? `<img src="${p.url}" alt="">`
-      : t.startsWith('audio/') ? `<audio controls src="${p.url}"></audio>`
-      : '<span style="font-size:24px">📎</span>';
-    const label = t.startsWith('audio/') ? '' : `<div class="nm2"><b>${esc(p.file.name)}</b><span style="color:var(--muted)">${fmtSize(p.file.size)}</span></div>`;
-    chip.innerHTML = `${preview}${label}<button class="x" title="Remove">×</button>`;
-    chip.querySelector('.x').onclick = () => removePending(p);
-    el.appendChild(chip);
-  });
-}
-
 async function sendText() {
-  if (sending || !activeId) return;
-  const t = $('#text'); let body = t.value.trim();
-  if (!body && !pending.length) return;
-  // Block swear / cuss words
-  if (body) {
-    body = cleanOrBlock(body);
-    if (body === null) return;
-  }
-  const cid = activeId;
-  sending = true; $('#send').disabled = true;
-  try {
-    if (!pending.length) {
-      t.value = ''; t.style.height = 'auto';
-      const { data, error } = await sb.from('messages').insert({ conversation_id: cid, sender_id: me.id, body }).select().single();
-      if (error) { t.value = body; return alert(error.message); }
-      if (activeId === cid) appendMsg(data);
-    } else {
-      const st = $('#upStatus'); st.classList.remove('hidden');
-      const items = pending.slice();
-      let caption = body;      // the message goes with the first file
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i], f = it.file;
-        st.textContent = `Uploading ${f.name} (${i + 1}/${items.length})…`;
-        const safe = f.name.replace(/[^\w.\-]+/g, '_');
-        const path = `${cid}/${crypto.randomUUID()}-${safe}`;
-        const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
-        if (up.error) { alert('Upload failed: ' + up.error.message); break; }
-        const { data, error } = await sb.from('messages').insert({
-          conversation_id: cid, sender_id: me.id, body: caption,
-          file_path: path, file_name: f.name, file_type: f.type, file_size: f.size
-        }).select().single();
-        if (error) { alert(error.message); break; }
-        if (caption) { t.value = ''; t.style.height = 'auto'; caption = ''; }
-        removePending(it);
-        if (activeId === cid) appendMsg(data);
-      }
-      st.classList.add('hidden');
-    }
-  } finally { sending = false; $('#send').disabled = false; checkLimit(); }
-  bumpConv(cid);
+  const t = $('#text'); const body = t.value.trim();
+  if (!body || !activeId) return;
+  t.value = ''; t.style.height = 'auto';
+  const { data, error } = await sb.from('messages').insert({ conversation_id: activeId, sender_id: me.id, body }).select().single();
+  if (error) { t.value = body; return alert(error.message); }
+  appendMsg(data);
+  bumpConv(activeId);
 }
 $('#send').onclick = sendText;
-$('#text').onkeydown = e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
-  else if (e.key === 'Enter' && lineCount(e.target.value) >= MAX_LINES) { e.preventDefault(); checkLimit(true); }
-};
-$('#text').oninput = e => {
-  const t = e.target, clamped = clampText(t.value), trimmed = clamped !== t.value;
-  if (trimmed) t.value = clamped;
-  t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 230) + 'px';
-  checkLimit(trimmed);
-};
+$('#text').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } };
+$('#text').oninput = e => { const t = e.target; t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; };
 
 $('#attach').onclick = () => $('#fileInput').click();
-$('#fileInput').onchange = e => {
-  [...e.target.files].forEach(addPending);
-  e.target.value = '';
-  $('#text').focus();
+$('#fileInput').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  const cid = activeId; if (!cid) return;
+  const st = $('#upStatus'); st.classList.remove('hidden');
+  for (const f of files) {
+    if (f.size > MAX_FILE_MB * 1048576) { alert(`${f.name} is over ${MAX_FILE_MB} MB.`); continue; }
+    st.textContent = 'Uploading ' + f.name + '…';
+    const safe = f.name.replace(/[^\w.\-]+/g, '_');
+    const path = `${cid}/${crypto.randomUUID()}-${safe}`;
+    const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
+    if (up.error) { alert('Upload failed: ' + up.error.message); continue; }
+    const { data, error } = await sb.from('messages').insert({
+      conversation_id: cid, sender_id: me.id, body: '',
+      file_path: path, file_name: f.name, file_type: f.type, file_size: f.size
+    }).select().single();
+    if (error) { alert(error.message); continue; }
+    if (activeId === cid) appendMsg(data);
+  }
+  st.classList.add('hidden');
+  bumpConv(cid);
 };
-
-/* ---------------- VOICE MESSAGES ---------------- */
-let rec = null, recChunks = [], recTimer = null, recCancel = false;
-
-function pickMime() {
-  if (!window.MediaRecorder) return '';
-  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'])
-    if (MediaRecorder.isTypeSupported(t)) return t;
-  return '';
-}
-function stopRec(cancel) { if (!rec) return; recCancel = cancel; rec.stop(); }
-
-$('#recCancel').onclick = () => stopRec(true);
-$('#mic').onclick = async () => {
-  if (rec) return stopRec(false);
-  if (!activeId) return;
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder)
-    return alert('Voice messages need a browser that supports recording and a secure (https) page.');
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { return alert('Microphone access was blocked. Allow it in your browser (the icon next to the address bar) and try again.'); }
-  const mime = pickMime();
-  const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-  rec = r; recChunks = []; recCancel = false;
-  r.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
-  r.onstop = () => {
-    stream.getTracks().forEach(t => t.stop());
-    clearInterval(recTimer);
-    $('#recBar').classList.add('hidden');
-    $('#mic').textContent = '🎤'; $('#mic').classList.remove('rec');
-    const type = (r.mimeType || mime || 'audio/webm').split(';')[0];
-    const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
-    const blob = new Blob(recChunks, { type });
-    rec = null;
-    if (!recCancel && blob.size > 0) addPending(new File([blob], `voice-message.${ext}`, { type }));
-  };
-  r.start();
-  const t0 = Date.now();
-  $('#recTime').textContent = '0:00';
-  recTimer = setInterval(() => {
-    const s = Math.floor((Date.now() - t0) / 1000);
-    $('#recTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  }, 250);
-  $('#recBar').classList.remove('hidden');
-  $('#mic').textContent = '⏹'; $('#mic').classList.add('rec');
-};
-
-/* ---------------- IMAGE VIEWER ---------------- */
-function openLightbox(src, path, name) {
-  const img = $('#lbImg'); img.classList.remove('zoomed'); img.src = src;
-  $('#lbName').textContent = name || '';
-  const dl = $('#lbDl'); dl.href = src; dl.setAttribute('download', name || 'image');
-  $('#lightbox').classList.remove('hidden');
-  sb.storage.from(BUCKET).createSignedUrl(path, 3600, { download: name || true })
-    .then(({ data }) => { if (data) dl.href = data.signedUrl; });
-}
-function closeLightbox() { $('#lightbox').classList.add('hidden'); $('#lbImg').removeAttribute('src'); }
-$('#lbClose').onclick = closeLightbox;
-$('#lightbox').onclick = e => { if (e.target.id === 'lightbox') closeLightbox(); };
-$('#lbImg').onclick = e => { e.stopPropagation(); e.target.classList.toggle('zoomed'); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLightbox(); closeModal(); } });
 
 async function bumpConv(id) { await loadConvs(); if (tab === 'chats') renderChats(); }
 
@@ -902,16 +480,9 @@ function subscribe() {
       const m = p.new;
       if (m.sender_id === me.id && m.conversation_id === activeId) return;
       if (!getConv(m.conversation_id)) await loadConvs();
-      if (call && m.conversation_id === call.convId) callChatAdd(m);
       if (m.conversation_id === activeId) appendMsg(m);
       else if (m.sender_id !== me.id) unread.add(m.conversation_id);
       await loadConvs(); if (tab === 'chats') renderChats();
-    })
-    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, p => {
-      const id = p.old?.id;
-      if (!id) return;
-      document.querySelectorAll(`[data-mid="${id}"]`).forEach(el => el.remove());
-      document.querySelectorAll(`#ccMsgs [data-id="${id}"]`).forEach(el => el.remove());
     })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_members', filter: 'user_id=eq.' + me.id }, async () => {
       await loadConvs(); if (tab === 'chats') renderChats();
@@ -921,7 +492,7 @@ function subscribe() {
 
 /* ---------------- MODALS ---------------- */
 function openModal(html) { $('#modal').innerHTML = html; $('#modalWrap').classList.remove('hidden'); }
-function closeModal() { if (modalLocked) return; $('#modalWrap').classList.add('hidden'); $('#modal').innerHTML = ''; }
+function closeModal() { $('#modalWrap').classList.add('hidden'); $('#modal').innerHTML = ''; }
 $('#modalWrap').onclick = e => { if (e.target.id === 'modalWrap') closeModal(); };
 
 $('#newGroup').onclick = () => {
@@ -930,23 +501,14 @@ $('#newGroup').onclick = () => {
     <div style="margin:14px 0 4px;color:var(--muted);font-size:13px">Add people from your contacts</div>
     ${contacts.length ? contacts.map(c => `<label class="chk"><input type="checkbox" value="${c.id}"> ${esc(c.display_name)} <span style="color:var(--muted)">@${esc(c.username)}</span></label>`).join('')
       : '<div class="empty">You have no contacts yet. You can create the group now and add people later from the Info button.</div>'}
-    <div class="err" id="gErr"></div>
     <div class="actions"><button class="btn ghost" id="mCancel">Cancel</button><button class="btn" id="mCreate">Create</button></div>`);
   $('#mCancel').onclick = closeModal;
   $('#mCreate').onclick = async () => {
     const name = $('#gName').value.trim(); if (!name) return $('#gName').focus();
     const ids = [...document.querySelectorAll('#modal input[type=checkbox]:checked')].map(i => i.value);
-    const btn = $('#mCreate'), gerr = $('#gErr');
-    btn.disabled = true; gerr.textContent = '';
-    try {
-      const { data, error } = await sb.rpc('create_group', { gname: name, members: ids });
-      if (error) throw error;
-      closeModal(); await loadConvs(); setTab('chats'); openConv(data);
-    } catch (ex) {
-      console.error('create_group failed', ex);
-      gerr.textContent = 'Could not create the group: ' + (ex.message || ex.details || JSON.stringify(ex));
-      btn.disabled = false;
-    }
+    const { data, error } = await sb.rpc('create_group', { gname: name, members: ids });
+    if (error) return alert(error.message);
+    closeModal(); await loadConvs(); setTab('chats'); openConv(data);
   };
 };
 
@@ -955,9 +517,9 @@ $('#infoBtn').onclick = () => {
   const memberIds = new Set(c.conversation_members.map(m => m.user_id));
   const people = c.conversation_members.map(m => m.profiles).filter(Boolean);
   const addable = contacts.filter(x => !memberIds.has(x.id));
-  openModal(`${c.is_group ? `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div class="av" style="width:56px;height:56px;font-size:24px;${avStyle(c.avatar_url)}">${avInner(c.avatar_url, convTitle(c))}</div><button class="btn ghost small" id="logoBtn">Change logo</button></div>` : ''}<h3>${esc(convTitle(c))}</h3>
+  openModal(`<h3>${esc(convTitle(c))}</h3>
     <div style="color:var(--muted);font-size:13px;margin-bottom:8px">${c.is_group ? 'Group chat' : 'Direct message'}</div>
-    ${people.map(p => `<div class="row" style="cursor:default;padding-left:0;padding-right:0"><div class="av sm" style="${avStyle(p.avatar_url)}">${avInner(p.avatar_url, p.display_name)}</div><div class="t"><b>${online.has(p.id) ? '🟢' : '⚪'} ${esc(p.display_name)}${p.id === me.id ? ' (you)' : ''}</b><span>@${esc(p.username)}</span></div></div>`).join('')}
+    ${people.map(p => `<div class="row" style="cursor:default;padding-left:0;padding-right:0"><div class="av sm">${esc(initial(p.display_name))}</div><div class="t"><b>${esc(p.display_name)}${p.id === me.id ? ' (you)' : ''}</b><span>@${esc(p.username)}</span></div></div>`).join('')}
     ${c.is_group && addable.length ? `<div style="margin:14px 0 6px;color:var(--muted);font-size:13px">Add a contact</div>
       <div style="display:flex;gap:8px"><select id="addSel">${addable.map(x => `<option value="${x.id}">${esc(x.display_name)} (@${esc(x.username)})</option>`).join('')}</select><button class="btn" id="addBtn">Add</button></div>` : ''}
     <div class="actions">
@@ -965,11 +527,6 @@ $('#infoBtn').onclick = () => {
       <button class="btn ghost" id="mClose">Close</button>
     </div>`);
   $('#mClose').onclick = closeModal;
-  if ($('#logoBtn')) $('#logoBtn').onclick = () => openAvatarPicker({
-    title: 'Group logo', current: c.avatar_url, name: convTitle(c),
-    onPick: av => setGroupAvatar(c, av),
-    onUpload: async blob => setGroupAvatar(c, await uploadAvatar('groups/' + c.id, blob))
-  });
   if ($('#addBtn')) $('#addBtn').onclick = async () => {
     const { error } = await sb.rpc('add_to_group', { cid: c.id, uid: $('#addSel').value });
     if (error) return alert(error.message);
@@ -982,901 +539,6 @@ $('#infoBtn').onclick = () => {
     closeModal(); activeId = null; showChat(false); await loadConvs(); render();
   };
 };
-
-/* ================================================================
-   PASSWORD RECOVERY (no email: username + secret recovery code)
-   ================================================================ */
-let showCodeAfterStart = false;
-let modalLocked = false;
-
-function showReset(on) {
-  $('#authForm').classList.toggle('hidden', on);
-  $('#resetForm').classList.toggle('hidden', !on);
-  $('#switchRow').classList.toggle('hidden', on);
-  $('#forgotRow').classList.toggle('hidden', on || signupMode);
-  $('#authSub').textContent = on ? 'Reset your password' : 'Sign in to start chatting';
-  $('#authErr').textContent = '';
-}
-$('#forgotLink').onclick = () => showReset(true);
-$('#backToLogin').onclick = () => showReset(false);
-
-$('#resetForm').onsubmit = async e => {
-  e.preventDefault();
-  const err = $('#authErr'); err.className = 'err'; err.textContent = '';
-  const btn = $('#rBtn'); btn.disabled = true;
-  const { data, error } = await sb.rpc('reset_password_with_code', {
-    uname: $('#rUser').value, code: $('#rCode').value, newpass: $('#rPass').value
-  });
-  btn.disabled = false;
-  if (error) { err.textContent = error.message; return; }
-  if (data === 'ok') {
-    $('#rCode').value = ''; $('#rPass').value = '';
-    showReset(false); setMode(false);
-    err.className = 'err ok';
-    err.textContent = 'Password changed! Sign in with your email and the new password, then make a new recovery code from your profile (click your picture).';
-  } else {
-    err.textContent = {
-      bad: 'Wrong username or recovery code.',
-      locked: 'Too many wrong tries. Wait 15 minutes and try again.',
-      short: 'Your new password must be at least 6 characters.'
-    }[data] || 'Something went wrong.';
-  }
-};
-
-async function showRecoveryCode(first) {
-  if (!first && !confirm('This replaces your old recovery code with a new one. Continue?')) return;
-  const { data: code, error } = await sb.rpc('generate_recovery_code');
-  if (error) return alert('Could not make a recovery code: ' + error.message + '\n\nHave you run recovery-setup.sql in Supabase?');
-  modalLocked = true;       // so a stray click or Esc can't close it before it's saved
-  openModal(`<h3>${first ? 'Welcome! ' : ''}Your recovery code</h3>
-    <p style="margin:0 0 12px;color:var(--muted)">If you ever forget your password, this code lets you set a new one without email. It’s shown <b>only once</b>, so save it somewhere safe (a screenshot, your notes, or a password manager). Anyone with your username and this code can take over your account, so keep it private.</p>
-    <div style="font:600 19px/1.3 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px;text-align:center;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;user-select:all">${esc(code)}</div>
-    <div class="actions"><button class="btn ghost" id="rcCopy">Copy</button><button class="btn ghost" id="rcDl">Download</button><button class="btn" id="rcDone">I’ve saved it</button></div>`);
-  $('#rcCopy').onclick = async () => {
-    try { await navigator.clipboard.writeText(code); $('#rcCopy').textContent = 'Copied ✓'; }
-    catch { alert('Couldn’t copy automatically. Select the code and copy it by hand.'); }
-  };
-  $('#rcDl').onclick = () => {
-    const blob = new Blob([`Chatterbox recovery code\nUsername: ${myProfile.username}\nCode: ${code}\n`], { type: 'text/plain' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'chatterbox-recovery-code.txt';
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  };
-  $('#rcDone').onclick = () => { modalLocked = false; closeModal(); };
-}
-
-function openChangePassword() {
-  openModal(`<h3>Change password</h3>
-    <div style="color:var(--muted);font-size:13px;margin-bottom:4px">New password (at least 6 characters)</div>
-    <input type="password" id="cpNew" autocomplete="new-password" minlength="6">
-    <div class="err" id="cpErr"></div>
-    <div class="actions"><button class="btn ghost" id="cpCancel">Cancel</button><button class="btn" id="cpSave">Save</button></div>`);
-  $('#cpCancel').onclick = closeModal;
-  $('#cpSave').onclick = async () => {
-    const pw = $('#cpNew').value;
-    if (pw.length < 6) { $('#cpErr').textContent = 'Use at least 6 characters.'; return; }
-    $('#cpSave').disabled = true;
-    const { error } = await sb.auth.updateUser({ password: pw });
-    if (error) { $('#cpErr').textContent = error.message; $('#cpSave').disabled = false; return; }
-    closeModal(); alert('Password changed.');
-  };
-}
-
-/* ================================================================
-   AVATARS (profile pictures + group logos)
-   Stored as either "😎|#4f46e5" (a preset) or a file path in the
-   public "avatars" bucket.
-   ================================================================ */
-const PRESETS = ['🦊|#f97316','🐼|#64748b','🐸|#16a34a','🦄|#c026d3','🐙|#e11d48','🐧|#0ea5e9',
-  '🦁|#eab308','🐯|#ea580c','🐨|#78716c','🐵|#a16207','🦉|#7c3aed','🐢|#15803d',
-  '😎|#4f46e5','🤖|#0891b2','👾|#9333ea','👻|#475569','🎮|#2563eb','⚽|#16a34a',
-  '🎵|#db2777','🔥|#dc2626','🚀|#4338ca','🌈|#f59e0b','🍕|#ea580c','⭐|#ca8a04'];
-
-const pubUrl = path => sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
-function avBg(a) {
-  if (!a || !a.includes('|')) return '';
-  const c = a.split('|')[1];
-  return /^#[0-9a-f]{6}$/i.test(c) ? c : '';
-}
-const avStyle = a => avBg(a) ? 'background:' + avBg(a) : '';
-function avInner(a, name) {
-  if (!a) return esc(initial(name));
-  if (a.includes('|')) return '<span class="em">' + esc(a.split('|')[0]) + '</span>';
-  return '<img src="' + esc(pubUrl(a)) + '" alt="">';
-}
-function setAv(el, a, name) { el.style.background = avBg(a); el.innerHTML = avInner(a, name); }
-function convAvatar(c) {
-  if (c.is_group) return c.avatar_url || null;
-  return c.conversation_members.find(m => m.user_id !== me.id)?.profiles?.avatar_url || null;
-}
-function refreshHeader() {
-  const c = activeId && getConv(activeId); if (!c) return;
-  $('#chTitle').textContent = convTitle(c); $('#chSub').textContent = convSub(c);
-  setAv($('#chAv'), convAvatar(c), convTitle(c)); $('#chAv').dataset.uid = dmOther(c); refreshOnline();
-}
-
-async function squareBlob(file, size = 256) {
-  const bmp = await createImageBitmap(file);
-  const s = Math.min(bmp.width, bmp.height);
-  const cv = document.createElement('canvas'); cv.width = cv.height = size;
-  cv.getContext('2d').drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, size, size);
-  return new Promise(res => cv.toBlob(res, 'image/jpeg', 0.85));
-}
-async function uploadAvatar(prefix, blob) {
-  const path = `${prefix}/${Date.now()}.jpg`;
-  const { error } = await sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' });
-  if (error) { alert('Upload failed: ' + error.message); throw error; }
-  return path;
-}
-
-function openAvatarPicker({ title, current, name, onPick, onUpload }) {
-  openModal(`<h3>${esc(title)}</h3>
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px">
-      <div class="av" id="apPrev" style="width:72px;height:72px;font-size:30px"></div>
-      <div style="display:flex;flex-direction:column;gap:8px"><button class="btn" id="apUp">Upload a picture</button><button class="btn ghost" id="apMake">🎨 Design your own</button><button class="btn ghost small" id="apReset">Use a plain initial</button></div>
-    </div>
-    <input type="file" id="apFile" accept="image/*" class="hidden">
-    <div style="color:var(--muted);font-size:13px">Or pick one</div>
-    <div class="pgrid">${PRESETS.map(p => `<button data-av="${p}" style="background:${p.split('|')[1]}" class="${p === current ? 'sel' : ''}"><span class="em">${p.split('|')[0]}</span></button>`).join('')}</div>
-    <div class="actions"><button class="btn ghost" id="apClose">Close</button></div>`);
-  setAv($('#apPrev'), current, name);
-  $('#apClose').onclick = closeModal;
-  const done = async fn => { try { await fn(); closeModal(); } catch (e) { console.warn(e); } };
-  document.querySelectorAll('#modal [data-av]').forEach(b => b.onclick = () => done(() => onPick(b.dataset.av)));
-  $('#apReset').onclick = () => done(() => onPick(null));
-  $('#apUp').onclick = () => $('#apFile').click();
-  $('#apMake').onclick = () => openAvatarMaker({
-    name, onSave: blob => onUpload(blob),
-    onCancel: () => openAvatarPicker({ title, current, name, onPick, onUpload })
-  });
-  $('#apFile').onchange = async e => {
-    const f = e.target.files[0]; if (!f) return;
-    $('#apUp').textContent = 'Uploading…'; $('#apUp').disabled = true;
-    let blob;
-    try { blob = await squareBlob(f); } catch { alert('That image couldn’t be read. Try a JPG or PNG.'); closeModal(); return; }
-    await done(() => onUpload(blob));
-  };
-}
-
-async function setMyAvatar(av) {
-  const old = myProfile.avatar_url;
-  const { error } = await sb.from('profiles').update({ avatar_url: av }).eq('id', me.id);
-  if (error) { alert(error.message); throw error; }
-  myProfile.avatar_url = av; profiles[me.id] = myProfile;
-  setAv($('#meAv'), av, myProfile.display_name);
-  if (old && !old.includes('|') && old !== av) sb.storage.from('avatars').remove([old]);
-  await loadConvs(); render(); refreshHeader();
-}
-async function setGroupAvatar(c, av) {
-  const { error } = await sb.rpc('set_group_avatar', { cid: c.id, av });
-  if (error) { alert(error.message); throw error; }
-  if (c.avatar_url && !c.avatar_url.includes('|') && c.avatar_url !== av) sb.storage.from('avatars').remove([c.avatar_url]);
-  await loadConvs(); render(); refreshHeader();
-}
-
-$('#meAv').onclick = () => {
-  openModal(`<h3>Your profile</h3>
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
-      <div class="av" id="pfAv" style="width:72px;height:72px;font-size:30px"></div>
-      <button class="btn ghost" id="pfPic">Change picture</button>
-    </div>
-    <div style="color:var(--muted);font-size:13px;margin-bottom:4px">Display name</div>
-    <input type="text" id="pfName" maxlength="40" value="${esc(myProfile.display_name)}">
-    <div style="color:var(--muted);font-size:13px;margin-top:8px">Username: @${esc(myProfile.username)}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn ghost small" id="pfCode">New recovery code</button><button class="btn ghost small" id="pfPass">Change password</button></div>
-    <div class="actions"><button class="btn ghost" id="pfClose">Close</button><button class="btn" id="pfSave">Save name</button></div>`);
-  setAv($('#pfAv'), myProfile.avatar_url, myProfile.display_name);
-  $('#pfClose').onclick = closeModal;
-  $('#pfCode').onclick = () => showRecoveryCode(false);
-  $('#pfPass').onclick = openChangePassword;
-  $('#pfPic').onclick = () => openAvatarPicker({
-    title: 'Profile picture', current: myProfile.avatar_url, name: myProfile.display_name,
-    onPick: av => setMyAvatar(av),
-    onUpload: async blob => setMyAvatar(await uploadAvatar('users/' + me.id, blob))
-  });
-  $('#pfSave').onclick = async () => {
-    const dn = $('#pfName').value.trim(); if (!dn) return $('#pfName').focus();
-    const { error } = await sb.from('profiles').update({ display_name: dn }).eq('id', me.id);
-    if (error) return alert(error.message);
-    myProfile.display_name = dn; profiles[me.id] = myProfile;
-    $('#meName').textContent = dn; setAv($('#meAv'), myProfile.avatar_url, dn);
-    closeModal();
-  };
-};
-
-/* ================================================================
-   MESSAGE LENGTH LIMIT
-   ================================================================ */
-const lineCount = s => s.split('\n').length;
-function clampText(s) {
-  let lines = s.split('\n');
-  if (lines.length > MAX_LINES) lines = lines.slice(0, MAX_LINES);
-  s = lines.join('\n');
-  return s.length > MAX_CHARS ? s.slice(0, MAX_CHARS) : s;
-}
-let limitTimer;
-function limitNote(txt, bad) {
-  const n = $('#limitNote');
-  if (!txt) { n.classList.add('hidden'); return; }
-  n.textContent = txt; n.style.color = bad ? 'var(--danger)' : 'var(--muted)'; n.classList.remove('hidden');
-}
-function checkLimit(flash) {
-  clearTimeout(limitTimer);
-  if (flash) {
-    limitNote(`Messages are limited to ${MAX_LINES} lines and ${MAX_CHARS} characters.`, true);
-    limitTimer = setTimeout(() => checkLimit(false), 3000);
-    return;
-  }
-  const v = $('#text').value, l = lineCount(v), c = v.length;
-  if (l >= MAX_LINES - 2 || c >= MAX_CHARS * 0.8) limitNote(`${l}/${MAX_LINES} lines · ${c}/${MAX_CHARS} characters`, l >= MAX_LINES || c >= MAX_CHARS);
-  else limitNote('');
-}
-
-/* ================================================================
-   PICTURE MAKER (text, images, emoji: move, resize, rotate)
-   ================================================================ */
-const MK_FONTS = [['Clean', 'system-ui, sans-serif'], ['Serif', 'Georgia, serif'], ['Mono', '"Courier New", monospace'],
-  ['Handwriting', '"Comic Sans MS", "Brush Script MT", cursive'], ['Heavy', 'Impact, "Arial Black", sans-serif']];
-const MK_COLORS = ['#4f46e5', '#0ea5e9', '#16a34a', '#eab308', '#f97316', '#dc2626', '#db2777', '#7c3aed', '#0f172a', '#ffffff'];
-const MK_EMOJI = ['😀', '😎', '🤩', '😈', '🥶', '🔥', '⭐', '❤️', '💀', '👑', '🎮', '🚀', '🐱', '🐶', '🦊', '🌈'];
-
-function openAvatarMaker({ name, onSave, onCancel }) {
-  const S = 512;
-  let bg = '#4f46e5', layers = [], sel = null, drag = null, nextId = 1;
-  openModal(`<h3>Design your picture</h3>
-    <canvas id="mkCv" width="${S}" height="${S}"></canvas>
-    <div style="font-size:12px;color:var(--muted);text-align:center">Drag to move · sliders or mouse wheel to resize · tap empty space to deselect</div>
-    <div class="mkrow"><span style="font-size:13px;color:var(--muted)">Background</span>
-      <input type="color" id="mkBg" value="${bg}" style="width:36px;height:28px;padding:0;border:1px solid var(--line);border-radius:6px;background:none">
-      ${MK_COLORS.map(c => `<button class="sw" data-bg="${c}" style="background:${c}"></button>`).join('')}</div>
-    <div class="mkrow"><button class="btn small" id="mkText">+ Text</button><button class="btn small" id="mkImg">+ Image</button>
-      <input type="file" id="mkFile" accept="image/*" class="hidden"></div>
-    <div class="mkrow" style="gap:2px">${MK_EMOJI.map(e => `<button class="emo" data-emo="${e}">${e}</button>`).join('')}</div>
-    <div id="mkLayer" class="hidden">
-      <div id="mkTextRow">
-        <input type="text" id="mkTxt" maxlength="30" placeholder="Your text">
-        <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
-          <input type="color" id="mkCol" style="width:36px;height:30px;padding:0;border:1px solid var(--line);border-radius:6px;background:none">
-          <select id="mkFont" style="flex:1">${MK_FONTS.map(f => `<option value="${esc(f[1])}">${f[0]}</option>`).join('')}</select>
-          <label class="chk" style="padding:0"><input type="checkbox" id="mkBold"> Bold</label>
-        </div>
-      </div>
-      <div class="lbl2">Size</div><input type="range" id="mkScale" min="0.1" max="4" step="0.05">
-      <div class="lbl2">Rotate</div><input type="range" id="mkRot" min="-180" max="180" step="1">
-      <div class="mkrow"><button class="btn ghost small" id="mkFront">Bring forward</button><button class="btn ghost small" id="mkBack">Send back</button>
-        <button class="btn ghost small" id="mkDup">Duplicate</button><button class="btn danger small" id="mkDel">Delete</button></div>
-    </div>
-    <div class="actions"><button class="btn ghost" id="mkCancel">Back</button><button class="btn" id="mkSave">Use this picture</button></div>`);
-
-  const cv = $('#mkCv'), ctx = cv.getContext('2d');
-  const fontOf = L => `${L.bold ? '700 ' : ''}${L.size}px ${L.font}`;
-  const bounds = L => {
-    if (L.type === 'img') return { w: L.w, h: L.h };
-    ctx.font = fontOf(L);
-    return { w: Math.max(20, ctx.measureText(L.text || ' ').width), h: L.size * 1.25 };
-  };
-
-  function draw(forExport = false, c = ctx) {
-    c.clearRect(0, 0, S, S); c.fillStyle = bg; c.fillRect(0, 0, S, S);
-    for (const L of layers) {
-      c.save(); c.translate(L.x, L.y); c.rotate(L.rot * Math.PI / 180); c.scale(L.scale, L.scale);
-      if (L.type === 'img') c.drawImage(L.img, -L.w / 2, -L.h / 2, L.w, L.h);
-      else { c.font = fontOf(L); c.fillStyle = L.color; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(L.text, 0, 0); }
-      c.restore();
-    }
-    if (forExport) return;
-    // dim everything outside the circle, because pictures are shown round
-    c.save(); c.fillStyle = 'rgba(0,0,0,.55)'; c.beginPath(); c.rect(0, 0, S, S); c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2, false); c.fill('evenodd'); c.restore();
-    c.save(); c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 2; c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 1, 0, Math.PI * 2); c.stroke(); c.restore();
-    if (sel) {
-      const b = bounds(sel);
-      c.save(); c.translate(sel.x, sel.y); c.rotate(sel.rot * Math.PI / 180); c.scale(sel.scale, sel.scale);
-      c.strokeStyle = '#fff'; c.setLineDash([8 / sel.scale, 6 / sel.scale]); c.lineWidth = 2 / sel.scale;
-      c.strokeRect(-b.w / 2 - 6, -b.h / 2 - 6, b.w + 12, b.h + 12); c.restore();
-    }
-  }
-
-  function sync() {
-    $('#mkLayer').classList.toggle('hidden', !sel);
-    if (!sel) return;
-    $('#mkTextRow').classList.toggle('hidden', sel.type !== 'text');
-    if (sel.type === 'text') { $('#mkTxt').value = sel.text; $('#mkCol').value = sel.color; $('#mkFont').value = sel.font; $('#mkBold').checked = sel.bold; }
-    $('#mkScale').value = sel.scale; $('#mkRot').value = sel.rot;
-  }
-  function addLayer(L) {
-    if (layers.length >= 15) return alert('That’s plenty of layers! Delete one first.');
-    L.id = nextId++; layers.push(L); sel = L; sync(); draw();
-  }
-  const base = { x: S / 2, y: S / 2, scale: 1, rot: 0 };
-
-  // pick + drag layers
-  const pt = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * S / r.width, y: (e.clientY - r.top) * S / r.height }; };
-  const hit = (px, py) => {
-    for (let i = layers.length - 1; i >= 0; i--) {
-      const L = layers[i], b = bounds(L), a = -L.rot * Math.PI / 180, dx = px - L.x, dy = py - L.y;
-      const lx = (dx * Math.cos(a) - dy * Math.sin(a)) / L.scale, ly = (dx * Math.sin(a) + dy * Math.cos(a)) / L.scale;
-      if (Math.abs(lx) <= b.w / 2 + 6 && Math.abs(ly) <= b.h / 2 + 6) return L;
-    }
-    return null;
-  };
-  cv.onpointerdown = e => {
-    const p = pt(e), L = hit(p.x, p.y); sel = L;
-    if (L) { drag = { ox: p.x - L.x, oy: p.y - L.y }; try { cv.setPointerCapture(e.pointerId); } catch {} }
-    sync(); draw();
-  };
-  cv.onpointermove = e => { if (!drag || !sel) return; const p = pt(e); sel.x = p.x - drag.ox; sel.y = p.y - drag.oy; draw(); };
-  cv.onpointerup = cv.onpointercancel = () => { drag = null; };
-  cv.onwheel = e => {
-    if (!sel) return; e.preventDefault();
-    sel.scale = Math.min(4, Math.max(.1, sel.scale * (e.deltaY < 0 ? 1.06 : .94))); sync(); draw();
-  };
-
-  // background
-  $('#mkBg').oninput = e => { bg = e.target.value; draw(); };
-  document.querySelectorAll('#modal [data-bg]').forEach(b => b.onclick = () => { bg = b.dataset.bg; $('#mkBg').value = bg; draw(); });
-
-  // add things
-  $('#mkText').onclick = () => {
-    addLayer({ ...base, type: 'text', text: 'Hello', size: 90, color: '#ffffff', font: MK_FONTS[0][1], bold: true });
-    $('#mkTxt').focus(); $('#mkTxt').select();
-  };
-  document.querySelectorAll('#modal [data-emo]').forEach(b => b.onclick = () =>
-    addLayer({ ...base, type: 'text', text: b.dataset.emo, size: 220, color: '#ffffff', font: MK_FONTS[0][1], bold: false }));
-  $('#mkImg').onclick = () => $('#mkFile').click();
-  $('#mkFile').onchange = async e => {
-    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-    const img = new Image(); img.src = URL.createObjectURL(f);
-    try { await img.decode(); } catch { return alert('That image couldn’t be read. Try a JPG or PNG.'); }
-    const k = 320 / Math.max(img.naturalWidth, img.naturalHeight);
-    addLayer({ ...base, type: 'img', img, w: img.naturalWidth * k, h: img.naturalHeight * k });
-  };
-
-  // edit the selected thing
-  $('#mkTxt').oninput = e => { if (sel?.type === 'text') { sel.text = e.target.value; draw(); } };
-  $('#mkCol').oninput = e => { if (sel?.type === 'text') { sel.color = e.target.value; draw(); } };
-  $('#mkFont').onchange = e => { if (sel?.type === 'text') { sel.font = e.target.value; draw(); } };
-  $('#mkBold').onchange = e => { if (sel?.type === 'text') { sel.bold = e.target.checked; draw(); } };
-  $('#mkScale').oninput = e => { if (sel) { sel.scale = +e.target.value; draw(); } };
-  $('#mkRot').oninput = e => { if (sel) { sel.rot = +e.target.value; draw(); } };
-  $('#mkFront').onclick = () => { const i = layers.indexOf(sel); if (i >= 0 && i < layers.length - 1) { layers.splice(i, 1); layers.splice(i + 1, 0, sel); draw(); } };
-  $('#mkBack').onclick = () => { const i = layers.indexOf(sel); if (i > 0) { layers.splice(i, 1); layers.splice(i - 1, 0, sel); draw(); } };
-  $('#mkDup').onclick = () => { if (sel) addLayer({ ...sel, x: sel.x + 24, y: sel.y + 24 }); };
-  $('#mkDel').onclick = () => { layers = layers.filter(l => l !== sel); sel = null; sync(); draw(); };
-
-  $('#mkCancel').onclick = onCancel;
-  $('#mkSave').onclick = async () => {
-    const btn = $('#mkSave'); btn.disabled = true; btn.textContent = 'Saving…';
-    sel = null; draw();
-    const out = document.createElement('canvas'); out.width = out.height = S;
-    draw(true, out.getContext('2d'));
-    const blob = await new Promise(r => out.toBlob(r, 'image/jpeg', 0.9));
-    try { await onSave(blob); closeModal(); }
-    catch { btn.disabled = false; btn.textContent = 'Use this picture'; }
-  };
-
-  // start with your initial so there's something to play with
-  addLayer({ ...base, type: 'text', text: initial(name), size: 260, color: '#ffffff', font: MK_FONTS[0][1], bold: true });
-}
-
-/* ================================================================
-   ONLINE STATUS (who is on right now) + last seen
-   Requires a last_seen timestamptz column on public.profiles:
-     alter table public.profiles add column if not exists last_seen timestamptz;
-   ================================================================ */
-let online = new Set();
-let presenceCh = null;
-let lastSeenTimer = null;
-
-function dmOther(c) { return c.is_group ? '' : (c.conversation_members.find(m => m.user_id !== me.id)?.user_id || ''); }
-
-function refreshOnline() {
-  document.querySelectorAll('.av[data-uid]').forEach(e => {
-    const uid = e.dataset.uid;
-    const isOn = !!uid && online.has(uid);
-    e.classList.toggle('online', isOn);
-    // red offline dot only when we know the person (have a uid) and they are offline
-    e.classList.toggle('offline', !!uid && !isOn);
-  });
-}
-
-async function bumpLastSeen() {
-  if (!me) return;
-  const now = new Date().toISOString();
-  try {
-    await sb.from('profiles').update({ last_seen: now }).eq('id', me.id);
-    if (myProfile) myProfile.last_seen = now;
-    if (profiles[me.id]) profiles[me.id].last_seen = now;
-  } catch (_) {}
-}
-
-function startPresence() {
-  stopPresence();
-  presenceCh = sb.channel('lobby', { config: { presence: { key: me.id } } });
-  presenceCh.on('presence', { event: 'sync' }, () => {
-    online = new Set(Object.keys(presenceCh.presenceState()));
-    if (tab === 'chats') renderChats();
-    refreshOnline();
-    const c = activeId && getConv(activeId); if (c) $('#chSub').textContent = convSub(c);
-    if (call) renderCallPeople();
-  }).subscribe(async status => {
-    if (status === 'SUBSCRIBED') {
-      await presenceCh.track({ at: Date.now() });
-      bumpLastSeen();
-    }
-  });
-  // heartbeat every 45s so last_seen stays fresh while the tab is open
-  clearInterval(lastSeenTimer);
-  lastSeenTimer = setInterval(bumpLastSeen, 45000);
-  // try to write last_seen when the tab is closed / hidden
-  window.addEventListener('pagehide', bumpLastSeen);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') bumpLastSeen();
-  });
-}
-function stopPresence() {
-  if (presenceCh) { sb.removeChannel(presenceCh); presenceCh = null; }
-  online = new Set();
-  clearInterval(lastSeenTimer);
-  lastSeenTimer = null;
-}
-
-/* ================================================================
-   VOICE + VIDEO CALLS (WebRTC, everyone connects to everyone)
-   Works well for up to ~5 people. Only people with the site open
-   ("online") can be rung.
-   To make calls work on strict networks (school wifi, some mobile
-   data) add a TURN server to this list.
-   ================================================================ */
-const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' }
-  // , { urls: 'turn:YOUR-TURN-SERVER:3478', username: '...', credential: '...' }
-];
-
-let sigCh = null, call = null, incoming = null;
-let ac = null, ringIv = null;
-const others = c => (getConv(c.convId)?.conversation_members || []).map(m => m.user_id).filter(u => u !== me.id);
-const nameFor = u => profiles[u]?.display_name || 'Someone';
-
-/* ---- ringtone ---- */
-document.addEventListener('pointerdown', () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch {} }, { once: true });
-function startRing() {
-  stopRing();
-  const beep = () => {
-    if (!ac) return;
-    [0, .35].forEach((d, i) => {
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.frequency.value = i ? 520 : 440; o.connect(g); g.connect(ac.destination);
-      const t = ac.currentTime + d;
-      g.gain.setValueAtTime(.15, t); g.gain.setValueAtTime(0, t + .3);
-      o.start(t); o.stop(t + .32);
-    });
-  };
-  beep(); ringIv = setInterval(beep, 2200);
-  try { navigator.vibrate?.([300, 200, 300]); } catch {}
-}
-function stopRing() { clearInterval(ringIv); ringIv = null; }
-
-/* ---- signalling over the call_signals table ---- */
-function startSignals() {
-  if (sigCh) sb.removeChannel(sigCh);
-  sigCh = sb.channel('signals-' + me.id)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_signals', filter: 'to_user=eq.' + me.id }, p => handleSignal(p.new))
-    .subscribe();
-}
-async function sendSignals(c, toUsers, type, payload = {}) {
-  if (!toUsers.length) return;
-  const rows = toUsers.map(u => ({ conversation_id: c.convId, call_id: c.id, from_user: me.id, to_user: u, type, payload }));
-  const { error } = await sb.from('call_signals').insert(rows);
-  if (error) console.warn('call signal failed:', error.message);
-}
-function stopCalls() { hangUp(true); dismissIncoming(); if (sigCh) { sb.removeChannel(sigCh); sigCh = null; } stopPresence(); }
-
-async function handleSignal(s) {
-  const p = s.payload || {}, from = s.from_user;
-  if (s.type === 'ring') return onRing(s);
-  if (incoming && incoming.callId === s.call_id && s.type === 'leave') return dismissIncoming();
-  if (!call || call.id !== s.call_id) return;
-  const group = getConv(call.convId)?.is_group;
-  switch (s.type) {
-    case 'hello': call.status[from] = 'joined'; if (!call.peers[from]) await callPeer(from); break;
-    case 'offer': call.status[from] = 'joined'; await onOffer(from, p.sdp); break;
-    case 'answer': await onAnswer(from, p.sdp); break;
-    case 'ice': addIce(from, p.c); break;
-    case 'state': call.state[from] = p; updateTile(from); break;
-    case 'screen': if (!p.on) removeScreen(from); break;
-    case 'decline': call.status[from] = 'declined'; if (!group) endAfter(nameFor(from) + ' declined'); break;
-    case 'busy': call.status[from] = 'busy'; if (!group) endAfter(nameFor(from) + ' is busy'); break;
-    case 'leave': closePeer(from); call.status[from] = 'left'; if (!group) endAfter('Call ended'); break;
-  }
-  if (call) renderCallPeople();
-}
-
-/* ---- incoming ring ---- */
-function onRing(s) {
-  const p = s.payload || {};
-  if (call && call.id === s.call_id) return;
-  if (call || incoming) {
-    if (!(incoming && incoming.callId === s.call_id)) sendSignals({ id: s.call_id, convId: s.conversation_id }, [s.from_user], 'busy');
-    return;
-  }
-  incoming = { callId: s.call_id, convId: s.conversation_id, from: s.from_user, kind: p.kind || 'audio' };
-  setAv($('#inAv'), profiles[s.from_user]?.avatar_url, p.fromName);
-  $('#inTitle').textContent = (p.fromName || 'Someone') + ' is calling…';
-  $('#inSub').textContent = (p.kind === 'video' ? 'Video call' : 'Voice call') + (p.title ? ' · ' + p.title : '');
-  $('#incoming').classList.remove('hidden');
-  startRing();
-  incoming.timer = setTimeout(dismissIncoming, 45000);
-}
-function dismissIncoming() {
-  if (incoming) clearTimeout(incoming.timer);
-  incoming = null; stopRing();
-  $('#incoming').classList.add('hidden');
-}
-$('#inAccept').onclick = async () => {
-  const inc = incoming; if (!inc) return;
-  dismissIncoming();
-  if (!getConv(inc.convId)) await loadConvs();
-  if (!getConv(inc.convId)) return;
-  joinCall(inc.callId, inc.convId, inc.kind, false);
-};
-$('#inDecline').onclick = () => {
-  const inc = incoming; if (!inc) return;
-  dismissIncoming();
-  sendSignals({ id: inc.callId, convId: inc.convId }, [inc.from], 'decline');
-};
-
-/* ---- starting a call ---- */
-$('#callVoice').onclick = () => preCall('audio');
-$('#callVideo').onclick = () => preCall('video');
-
-function preCall(kind) {
-  if (!activeId) return;
-  if (call || incoming) return alert('You are already in a call.');
-  const c = getConv(activeId), ids = others({ convId: c.id });
-  const onl = ids.filter(u => online.has(u));
-  openModal(`<h3>${kind === 'video' ? 'Video' : 'Voice'} call · ${esc(convTitle(c))}</h3>
-    <div style="color:var(--muted);font-size:13px;margin-bottom:8px">Only people who are online right now can be rung.</div>
-    ${ids.map(u => `<div class="chk">${online.has(u) ? '🟢' : '⚪'} <b>${esc(nameFor(u))}</b> <span style="color:var(--muted)">${online.has(u) ? 'online, will be rung' : 'offline, can’t be rung'}</span></div>`).join('')}
-    ${onl.length ? '' : '<div class="empty" style="padding:14px 0 0">Nobody here is online right now.</div>'}
-    <div class="actions"><button class="btn ghost" id="pcCancel">Cancel</button>${onl.length ? `<button class="btn" id="pcStart">Call ${onl.length} online</button>` : ''}</div>`);
-  $('#pcCancel').onclick = closeModal;
-  if (onl.length) $('#pcStart').onclick = () => { closeModal(); beginCall(kind, c.id); };
-}
-
-async function beginCall(kind, convId) {
-  const ids = others({ convId });
-  if (!(await joinCall(crypto.randomUUID(), convId, kind, true))) return;
-  ids.forEach(u => { call.status[u] = 'offline'; });
-  ringMembers(ids.filter(u => online.has(u)));
-}
-
-function ringMembers(uids) {
-  const c = call, conv = getConv(c.convId);
-  uids.forEach(u => {
-    c.status[u] = 'ringing';
-    setTimeout(() => {
-      if (call !== c || c.status[u] !== 'ringing') return;
-      c.status[u] = 'no answer'; renderCallPeople();
-      if (!conv.is_group && !Object.keys(c.peers).length) endAfter('No answer');
-    }, 45000);
-  });
-  sendSignals(c, uids, 'ring', { kind: c.kind, fromName: myProfile.display_name, title: conv.is_group ? convTitle(conv) : '' });
-  renderCallPeople();
-}
-
-async function joinCall(id, convId, kind, host) {
-  if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
-    alert('Calls need a browser that supports them and a secure (https) page.'); return false;
-  }
-  let local = null;
-  try { local = await navigator.mediaDevices.getUserMedia({ audio: true, video: kind === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } } : false }); }
-  catch {
-    if (kind === 'video') {
-      try { local = await navigator.mediaDevices.getUserMedia({ audio: true }); alert('Couldn’t use your camera, so you’re joining with audio only.'); } catch {}
-    }
-  }
-  if (!local) { alert('Couldn’t use your microphone. Allow access in the browser (icon next to the address bar) and try again.'); return false; }
-
-  const conv = getConv(convId);
-  call = { id, convId, kind, local, peers: {}, pendingIce: {}, status: {}, state: {}, started: Date.now(), timer: null };
-  const hasVid = local.getVideoTracks().length > 0;
-  $('#callTitle').textContent = convTitle(conv);
-  $('#callGrid').innerHTML = '';
-  $('#localVideo').srcObject = local;
-  $('#localVideo').classList.remove('novid');
-  setAv($('#localBig'), myProfile.avatar_url, myProfile.display_name);
-  $('#localTile').classList.toggle('hidden', !hasVid);
-  $('#cCam').classList.toggle('hidden', !hasVid);
-  $('#cShare').classList.toggle('hidden', !navigator.mediaDevices?.getDisplayMedia);   // phones usually can't share
-  $('#cMic').classList.remove('off'); $('#cMic').textContent = '🎤';
-  $('#cCam').classList.remove('off');
-  $('#callTimer').textContent = '0:00';
-  $('#call').classList.remove('hidden');
-  call.timer = setInterval(() => {
-    if (!call) return;
-    const s = Math.floor((Date.now() - call.started) / 1000);
-    $('#callTimer').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  }, 1000);
-  renderCallPeople();
-  if (!host) sendSignals(call, others(call), 'hello');
-  return true;
-}
-
-/* ---- peer connections ---- */
-const micOn = () => call?.local.getAudioTracks()[0]?.enabled !== false;
-const camOn = () => { const t = call?.local.getVideoTracks()[0]; return !!t && t.enabled; };
-
-function makePeer(uid) {
-  const c = call;
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  const peer = { pc, polite: me.id > uid };
-  c.peers[uid] = peer;
-  c.local.getTracks().forEach(t => pc.addTrack(t, c.local));
-  pc.onicecandidate = e => { if (e.candidate && call === c) sendSignals(c, [uid], 'ice', { c: e.candidate.toJSON() }); };
-  // if we're already sharing when someone joins, they get the screen too
-  if (c.screen) c.screen.senders[uid] = c.screen.stream.getTracks().map(t => pc.addTrack(t, c.screen.stream));
-  // adding/removing a screen later means negotiating again (only after the first handshake is done)
-  pc.onnegotiationneeded = async () => {
-    if (!peer.ready || call !== c) return;
-    try {
-      const offer = await pc.createOffer();
-      if (pc.signalingState !== 'stable') return;
-      await pc.setLocalDescription(offer);
-      await sendSignals(c, [uid], 'offer', { sdp: { type: offer.type, sdp: offer.sdp } });
-    } catch (e) { console.warn(e); }
-  };
-  pc.ontrack = e => {
-    const s = e.streams[0]; if (!s) return;
-    if (!peer.mainId) peer.mainId = s.id;                 // first stream = their camera/mic
-    if (s.id !== peer.mainId) return showScreen(uid, s);  // any other stream = their shared screen
-    const t = ensureTile(uid);
-    if (t.video.srcObject !== e.streams[0]) t.video.srcObject = e.streams[0];
-    t.video.play().catch(() => {});
-    updateTile(uid);
-  };
-  pc.onconnectionstatechange = () => {
-    if (call !== c) return;
-    const st = pc.connectionState;
-    if (st === 'connected') { c.status[uid] = 'joined'; sendSignals(c, [uid], 'state', { cam: camOn(), mic: micOn() }); }
-    if (st === 'failed' || st === 'closed') { closePeer(uid); c.status[uid] = 'connection failed'; }
-    renderCallPeople();
-  };
-  ensureTile(uid);
-  return peer;
-}
-async function callPeer(uid) {
-  const c = call, p = c.peers[uid] || makePeer(uid);
-  try {
-    const offer = await p.pc.createOffer();
-    await p.pc.setLocalDescription(offer);
-    await sendSignals(c, [uid], 'offer', { sdp: { type: offer.type, sdp: offer.sdp } });
-  } catch (e) { console.warn(e); }
-}
-async function onOffer(from, sdp) {
-  const c = call, p = c.peers[from] || makePeer(from), pc = p.pc;
-  try {
-    if (pc.signalingState !== 'stable' && !p.polite) return;      // glare: the other side wins
-    await pc.setRemoteDescription(sdp);
-    await flushIce(from);
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    p.ready = true;
-    await sendSignals(c, [from], 'answer', { sdp: { type: answer.type, sdp: answer.sdp } });
-  } catch (e) { console.warn(e); }
-}
-async function onAnswer(from, sdp) {
-  const p = call.peers[from];
-  if (!p || p.pc.signalingState !== 'have-local-offer') return;
-  try { await p.pc.setRemoteDescription(sdp); await flushIce(from); p.ready = true; } catch (e) { console.warn(e); }
-}
-function addIce(uid, cand) {
-  const p = call.peers[uid];
-  if (p && p.pc.remoteDescription) p.pc.addIceCandidate(cand).catch(() => {});
-  else (call.pendingIce[uid] = call.pendingIce[uid] || []).push(cand);
-}
-async function flushIce(uid) {
-  const p = call.peers[uid], list = call.pendingIce[uid] || [];
-  call.pendingIce[uid] = [];
-  for (const c of list) { try { await p.pc.addIceCandidate(c); } catch {} }
-}
-function closePeer(uid) {
-  const p = call?.peers[uid];
-  if (p) { try { p.pc.close(); } catch {} delete call.peers[uid]; }
-  document.getElementById('tile-' + uid)?.remove();
-  removeScreen(uid);
-}
-
-/* ---- call screen ---- */
-function ensureTile(uid) {
-  let el = document.getElementById('tile-' + uid);
-  if (!el) {
-    el = document.createElement('div'); el.className = 'tile'; el.id = 'tile-' + uid;
-    el.innerHTML = `<div class="big" style="${avStyle(profiles[uid]?.avatar_url)}">${avInner(profiles[uid]?.avatar_url, nameFor(uid))}</div><video autoplay playsinline class="novid"></video><span class="lbl">${esc(nameFor(uid))}</span>`;
-    $('#callGrid').appendChild(el);
-  }
-  return { el, video: el.querySelector('video') };
-}
-function updateTile(uid) {
-  const el = document.getElementById('tile-' + uid); if (!el || !call) return;
-  const v = el.querySelector('video'), s = v.srcObject;
-  const hasVid = s && s.getVideoTracks().length > 0 && call.state[uid]?.cam !== false;
-  v.classList.toggle('novid', !hasVid);
-  el.querySelector('.lbl').textContent = nameFor(uid) + (call.state[uid]?.mic === false ? ' 🔇' : '');
-}
-function renderCallPeople() {
-  if (!call) return;
-  const labels = { joined: 'in call', ringing: 'ringing…', declined: 'declined', busy: 'busy', 'no answer': 'no answer', left: 'left', 'connection failed': 'connection failed' };
-  $('#callPeople').innerHTML = others(call).map(u => {
-    const s = call.status[u];
-    const label = labels[s] || (online.has(u) ? 'online' : 'offline');
-    const canRing = online.has(u) && s !== 'joined' && s !== 'ringing';
-    return `<span class="pchip">${online.has(u) ? '🟢' : '⚪'} ${esc(nameFor(u))} · ${label}${canRing ? ` <button data-ring="${u}">Ring</button>` : ''}</span>`;
-  }).join('');
-  $('#callPeople').querySelectorAll('[data-ring]').forEach(b => b.onclick = () => ringMembers([b.dataset.ring]));
-}
-function broadcastState() { if (call) sendSignals(call, Object.keys(call.peers), 'state', { cam: camOn(), mic: micOn() }); }
-$('#cMic').onclick = () => {
-  const t = call?.local.getAudioTracks()[0]; if (!t) return;
-  t.enabled = !t.enabled;
-  $('#cMic').classList.toggle('off', !t.enabled); $('#cMic').textContent = t.enabled ? '🎤' : '🔇';
-  broadcastState();
-};
-$('#cCam').onclick = () => {
-  const t = call?.local.getVideoTracks()[0]; if (!t) return;
-  t.enabled = !t.enabled;
-  $('#cCam').classList.toggle('off', !t.enabled);
-  $('#localVideo').classList.toggle('novid', !t.enabled);
-  broadcastState();
-};
-$('#cEnd').onclick = () => hangUp();
-
-/* ---- in-call chat (same chat as the conversation you're calling in) ---- */
-let ccUnread = 0, ccDrag = null;
-function updateBadge() { $('#ccBadge').textContent = ccUnread; $('#ccBadge').classList.toggle('hidden', !ccUnread); }
-
-// keep the panel on screen and never over the call buttons
-function placeChat(x, y) {
-  const p = $('#callChat'), w = p.offsetWidth;
-  const barTop = $('#callBar').getBoundingClientRect().top - 8;
-  x = Math.min(Math.max(0, x), Math.max(0, innerWidth - w));
-  y = Math.min(Math.max(0, y), Math.max(0, barTop - 160));
-  p.style.left = x + 'px'; p.style.top = y + 'px'; p.style.right = 'auto';
-  p.style.maxHeight = Math.max(160, barTop - y) + 'px';
-}
-$('#ccHead').onpointerdown = e => {
-  if (e.target.closest('button')) return;
-  const r = $('#callChat').getBoundingClientRect();
-  ccDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
-  try { $('#ccHead').setPointerCapture(e.pointerId); } catch {}
-};
-$('#ccHead').onpointermove = e => { if (ccDrag) placeChat(e.clientX - ccDrag.dx, e.clientY - ccDrag.dy); };
-$('#ccHead').onpointerup = $('#ccHead').onpointercancel = () => { ccDrag = null; };
-window.addEventListener('resize', () => {
-  const p = $('#callChat'); if (p.classList.contains('hidden')) return;
-  const r = p.getBoundingClientRect(); placeChat(r.left, r.top);
-});
-
-async function toggleCallChat(force) {
-  if (!call) return;
-  const p = $('#callChat'), show = force ?? p.classList.contains('hidden');
-  p.classList.toggle('hidden', !show);
-  if (!show) return;
-  ccUnread = 0; updateBadge();
-  if (!p.style.left) placeChat(innerWidth - p.offsetWidth - 14, 70);
-  if (!call.ccLoaded) {
-    call.ccLoaded = true;
-    const c = call;
-    const { data } = await sb.from('messages').select('*').eq('conversation_id', c.convId).order('created_at', { ascending: false }).limit(30);
-    if (call === c) { $('#ccMsgs').innerHTML = ''; (data || []).reverse().forEach(m => callChatAdd(m, true)); }
-  }
-  $('#ccMsgs').scrollTop = $('#ccMsgs').scrollHeight;
-  $('#ccText').focus();
-}
-function callChatAdd(m, quiet) {
-  if (!call || m.conversation_id !== call.convId) return;
-  const box = $('#ccMsgs');
-  if (box.querySelector(`[data-id="${m.id}"]`)) return;
-  const mine = m.sender_id === me.id;
-  const body = m.body || (m.file_type?.startsWith('audio/') ? '🎤 voice message' : m.file_name ? '📎 ' + m.file_name : '');
-  const div = document.createElement('div');
-  div.className = 'ccm' + (mine ? ' me' : ''); div.dataset.id = m.id;
-  div.innerHTML = (mine ? '' : `<span class="n">${esc(nameFor(m.sender_id))}</span>`) + esc(body);
-  box.appendChild(div); box.scrollTop = box.scrollHeight;
-  if (!quiet && !mine && $('#callChat').classList.contains('hidden')) { ccUnread++; updateBadge(); }
-}
-async function sendCallMsg() {
-  const t = $('#ccText');
-  let body = clampText(t.value).trim();
-  if (!body || !call) return;
-  body = cleanOrBlock(body);
-  if (body === null) return;
-  const c = call;
-  t.value = '';
-  const { data, error } = await sb.from('messages').insert({ conversation_id: c.convId, sender_id: me.id, body }).select().single();
-  if (error) { t.value = body; return alert(error.message); }
-  callChatAdd(data);
-  if (activeId === data.conversation_id) appendMsg(data);
-  bumpConv(data.conversation_id);
-}
-function resetCallChat() {
-  const p = $('#callChat');
-  p.classList.add('hidden'); p.style.left = p.style.top = p.style.maxHeight = ''; p.style.right = '';
-  $('#ccMsgs').innerHTML = ''; $('#ccText').value = ''; ccUnread = 0; updateBadge();
-}
-$('#cChat').onclick = () => toggleCallChat();
-$('#ccClose').onclick = () => toggleCallChat(false);
-$('#ccSend').onclick = sendCallMsg;
-$('#ccText').onkeydown = e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCallMsg(); }
-  else if (e.key === 'Enter' && lineCount(e.target.value) >= MAX_LINES) e.preventDefault();
-};
-$('#ccText').oninput = e => { const v = clampText(e.target.value); if (v !== e.target.value) e.target.value = v; };
-
-/* ---- screen sharing ---- */
-async function startShare() {
-  const c = call; if (!c || c.screen) return;
-  let stream;
-  try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 15, max: 30 } }, audio: true }); }
-  catch (e) { if (e.name !== 'NotAllowedError') alert('Couldn’t start screen sharing: ' + (e.message || e.name)); return; }
-  if (call !== c) { stream.getTracks().forEach(t => t.stop()); return; }
-  c.screen = { stream, senders: {} };
-  stream.getVideoTracks()[0].onended = stopShare;          // the browser's own "Stop sharing" button
-  Object.keys(c.peers).forEach(uid => {
-    c.screen.senders[uid] = stream.getTracks().map(t => c.peers[uid].pc.addTrack(t, stream));
-  });
-  $('#cShare').classList.add('sharing'); $('#shareBar').classList.remove('hidden');
-}
-function stopShare() {
-  const c = call; if (!c?.screen) return;
-  const { stream, senders } = c.screen; c.screen = null;
-  stream.getTracks().forEach(t => { t.onended = null; t.stop(); });
-  Object.entries(senders).forEach(([uid, list]) => {
-    const p = c.peers[uid];
-    if (p) list.forEach(s => { try { p.pc.removeTrack(s); } catch {} });
-  });
-  sendSignals(c, Object.keys(c.peers), 'screen', { on: false });
-  $('#cShare').classList.remove('sharing'); $('#shareBar').classList.add('hidden');
-}
-$('#cShare').onclick = () => (call?.screen ? stopShare() : startShare());
-$('#shareStop').onclick = stopShare;
-
-function showScreen(uid, stream) {
-  let el = document.getElementById('screen-' + uid);
-  if (!el) {
-    el = document.createElement('div'); el.className = 'tile screen'; el.id = 'screen-' + uid;
-    el.innerHTML = `<video autoplay playsinline></video><span class="lbl">${esc(nameFor(uid))}’s screen</span><button class="fsb" title="Full screen">⛶</button>`;
-    $('#callGrid').prepend(el);
-    el.querySelector('.fsb').onclick = () => (document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen?.());
-  }
-  const v = el.querySelector('video');
-  if (v.srcObject !== stream) v.srcObject = stream;
-  v.play().catch(() => {});
-  stream.onremovetrack = () => { if (!stream.getTracks().length) removeScreen(uid); };
-  stream.getVideoTracks().forEach(t => { t.onended = () => removeScreen(uid); });
-}
-function removeScreen(uid) { document.getElementById('screen-' + uid)?.remove(); }
-
-function endAfter(msg) {
-  if (!call) return;
-  const c = call; $('#callTitle').textContent = msg;
-  setTimeout(() => { if (call === c) hangUp(); }, 1500);
-}
-async function hangUp(quiet = false) {
-  const c = call; if (!c) return;
-  call = null;
-  clearInterval(c.timer);
-  Object.values(c.peers).forEach(p => { try { p.pc.close(); } catch {} });
-  c.local.getTracks().forEach(t => t.stop());
-  if (c.screen) c.screen.stream.getTracks().forEach(t => { t.onended = null; t.stop(); });
-  $('#cShare').classList.remove('sharing'); $('#shareBar').classList.add('hidden');
-  resetCallChat();
-  $('#call').classList.add('hidden');
-  $('#callGrid').innerHTML = '';
-  $('#localVideo').srcObject = null;
-  if (quiet) return;
-  await sendSignals(c, others(c), 'leave');
-  await sb.from('call_signals').delete().eq('call_id', c.id).or(`from_user.eq.${me.id},to_user.eq.${me.id}`);
-}
 </script>
 </body>
 </html>
