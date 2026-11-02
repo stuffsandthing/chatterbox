@@ -326,8 +326,10 @@ const MAX_LINES = 10;      // longest message you can send, in lines
 const MAX_CHARS = 1000;    // ...and in characters
 const BUCKET = 'chat-files';
 
-/* ---- swear / cuss word filter (blocks messages containing these) ---- */
+/* ---- swear / cuss word filter ---- */
+// Original list + words from swear.txt (including slang / masked forms)
 const BAD_WORDS = [
+  // original list
   'fuck','fucker','fucking','fucked','fucks','motherfucker','mf','mofo',
   'shit','shitty','bullshit','shithead',
   'ass','asshole','asses','arse','arsehole',
@@ -342,13 +344,38 @@ const BAD_WORDS = [
   'piss','pissed','pissing',
   'whore','whores','slut','sluts','slutty',
   'nigger','nigga','fag','faggot','retard','retarded',
-  'twat','wanker','tosser','bollocks','bugger'
+  'twat','wanker','tosser','bollocks','bugger',
+  // from swear.txt
+  'sh*t','sh**','s*it','*hit','f*ck','assh*le','s_h_i_t',
+  'sybau','tfym','syfm','nga','stfu','idgaf','idgas'
 ];
-const BAD_RE = new RegExp('\\b(' + BAD_WORDS.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')\\b', 'i');
+
+// Build a regex that treats * and _ inside the list as "any character" so
+// "f*ck", "sh*t", "s_h_i_t" etc. still match real typing
+function makeBadRegex(words) {
+  const parts = words.map(w => {
+    // escape special regex chars except * and _ which we turn into wildcards
+    let pat = w.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+    pat = pat.replace(/\*/g, '.?').replace(/_/g, '.?');
+    return pat;
+  });
+  return new RegExp('\\b(' + parts.join('|') + ')\\b', 'i');
+}
+const BAD_RE = makeBadRegex(BAD_WORDS);
+
 function containsBadWords(text) {
   if (!text) return false;
-  return BAD_RE.test(String(text));
+  // also strip common mask characters before testing so "f*ck" typed as "f.ck" or "f_ck" is caught
+  const cleaned = String(text).toLowerCase().replace(/[.*_\-]/g, '');
+  if (BAD_RE.test(text) || BAD_RE.test(cleaned)) return true;
+  // extra pass for very short slang that may not have word boundaries
+  const lower = text.toLowerCase();
+  return BAD_WORDS.some(w => {
+    const plain = w.replace(/[.*_]/g, '');
+    return plain.length >= 3 && lower.includes(plain);
+  });
 }
+
 function cleanOrBlock(text) {
   if (containsBadWords(text)) {
     alert('Your message contains blocked language. Please rephrase without swear or cuss words.');
