@@ -1071,7 +1071,12 @@ const PRESETS = ['🦊|#f97316','🐼|#64748b','🐸|#16a34a','🦄|#c026d3','�
   '😎|#4f46e5','🤖|#0891b2','👾|#9333ea','👻|#475569','🎮|#2563eb','⚽|#16a34a',
   '🎵|#db2777','🔥|#dc2626','🚀|#4338ca','🌈|#f59e0b','🍕|#ea580c','⭐|#ca8a04'];
 
-const pubUrl = path => sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+function pubUrl(path) {
+  if (!path) return '';
+  // already a full URL — use as-is
+  if (/^https?:\/\//i.test(path)) return path;
+  return sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+}
 function avBg(a) {
   if (!a || !a.includes('|')) return '';
   const c = a.split('|')[1];
@@ -1080,10 +1085,19 @@ function avBg(a) {
 const avStyle = a => avBg(a) ? 'background:' + avBg(a) : '';
 function avInner(a, name) {
   if (!a) return esc(initial(name));
+  // preset emoji avatar e.g. "😎|#4f46e5"
   if (a.includes('|')) return '<span class="em">' + esc(a.split('|')[0]) + '</span>';
-  return '<img src="' + esc(pubUrl(a)) + '" alt="">';
+  // uploaded image — show initial if the file fails to load
+  const src = pubUrl(a);
+  const letter = esc(initial(name));
+  return '<img src="' + esc(src) + '" alt="" onerror="this.style.display=\'none\';if(!this.dataset.fb){this.dataset.fb=1;this.parentNode.appendChild(document.createTextNode(\'' + letter + '\'));}">';
 }
-function setAv(el, a, name) { el.style.background = avBg(a); el.innerHTML = avInner(a, name); }
+function setAv(el, a, name) {
+  if (!el) return;
+  el.style.background = avBg(a) || '';
+  if (a && !String(a).includes('|')) el.style.background = '';
+  el.innerHTML = avInner(a, name);
+}
 function convAvatar(c) {
   if (c.is_group) return c.avatar_url || null;
   return c.conversation_members.find(m => m.user_id !== me.id)?.profiles?.avatar_url || null;
