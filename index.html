@@ -350,30 +350,50 @@ const BAD_WORDS = [
   'sybau','tfym','syfm','nga','stfu','idgaf','idgas'
 ];
 
-// Build a regex that treats * and _ inside the list as "any character" so
-// "f*ck", "sh*t", "s_h_i_t" etc. still match real typing
+// Normalize for matching: lowercase, strip spaces/mask chars, collapse repeated letters.
+// "daaaaammmmmnnnn" → "damn", "fuuuuck" → "fuck", "f*ck" → "fck",
+// "asssss" → "as", "f u c k" → "fuck"
+function normalizeSwear(s) {
+  return String(s).toLowerCase()
+    .replace(/[\s.*_\-]/g, '')
+    .replace(/(.)\1+/g, '$1');
+}
+
+// Pre-normalize every bad word once
+const NORMALIZED_BAD = BAD_WORDS.map(w => {
+  // treat * and _ as optional single chars before normalizing
+  const withWild = w.replace(/\*/g, '.').replace(/_/g, '.');
+  return normalizeSwear(withWild);
+}).filter(w => w.length >= 2);
+
+// Also keep a direct regex for exact / lightly masked forms
 function makeBadRegex(words) {
   const parts = words.map(w => {
-    // escape special regex chars except * and _ which we turn into wildcards
     let pat = w.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-    pat = pat.replace(/\*/g, '.?').replace(/_/g, '.?');
+    pat = pat.replace(/\*/g, '.').replace(/_/g, '.');
     return pat;
   });
-  return new RegExp('\\b(' + parts.join('|') + ')\\b', 'i');
+  return new RegExp('(?:^|[^a-z0-9])(' + parts.join('|') + ')(?=[^a-z0-9]|$)', 'i');
 }
 const BAD_RE = makeBadRegex(BAD_WORDS);
 
 function containsBadWords(text) {
   if (!text) return false;
-  // also strip common mask characters before testing so "f*ck" typed as "f.ck" or "f_ck" is caught
-  const cleaned = String(text).toLowerCase().replace(/[.*_\-]/g, '');
-  if (BAD_RE.test(text) || BAD_RE.test(cleaned)) return true;
-  // extra pass for very short slang that may not have word boundaries
-  const lower = text.toLowerCase();
-  return BAD_WORDS.some(w => {
-    const plain = w.replace(/[.*_]/g, '');
-    return plain.length >= 3 && lower.includes(plain);
-  });
+  const raw = String(text);
+  // 1) direct / lightly masked match
+  if (BAD_RE.test(raw)) return true;
+  // 2) normalized match (catches elongated + masked forms)
+  //    split into words so "hell" does not match inside "hello"
+  const norm = normalizeSwear(raw);
+  const tokens = norm.split(/[^a-z0-9]+/).filter(Boolean);
+  for (const t of tokens) {
+    if (NORMALIZED_BAD.includes(t)) return true;
+  }
+  // also check the whole normalized string for multi-word phrases if needed
+  if (NORMALIZED_BAD.some(b => b.length >= 3 && norm.includes(b) && new RegExp('(?:^|[^a-z0-9])' + b + '(?=[^a-z0-9]|$)').test(norm))) {
+    return true;
+  }
+  return false;
 }
 
 function cleanOrBlock(text) {
