@@ -91,10 +91,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 .pgrid button{aspect-ratio:1;border-radius:50%;border:2px solid transparent;padding:0;display:flex;align-items:center;justify-content:center}
 .pgrid button.sel{border-color:var(--text)}
 
-/* online dots + calls */
+/* online / offline dots + calls */
 .av{position:relative}
-.av.online::after{content:'';position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;background:#22c55e;border:2px solid var(--panel)}
-.av.sm.online::after{width:10px;height:10px}
+.av.online::after,.av.offline::after{content:'';position:absolute;right:-1px;bottom:-1px;width:12px;height:12px;border-radius:50%;border:2px solid var(--panel)}
+.av.online::after{background:#22c55e}
+.av.offline::after{background:#ef4444}
+.av.sm.online::after,.av.sm.offline::after{width:10px;height:10px}
 #incoming{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
 .inbox{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px;text-align:center;width:100%;max-width:320px}
 .inbox .av{width:72px;height:72px;font-size:30px;margin:0 auto 12px;animation:pulse 1.4s infinite}
@@ -350,49 +352,35 @@ const BAD_WORDS = [
   'sybau','tfym','syfm','nga','stfu','idgaf','idgas'
 ];
 
-// Normalize for matching: lowercase, strip spaces/mask chars, collapse repeated letters.
-// "daaaaammmmmnnnn" → "damn", "fuuuuck" → "fuck", "f*ck" → "fck",
-// "asssss" → "as", "f u c k" → "fuck"
-function normalizeSwear(s) {
-  return String(s).toLowerCase()
-    .replace(/[\s.*_\-]/g, '')
-    .replace(/(.)\1+/g, '$1');
-}
+// Filter version — open the browser console, you should see this if the new file loaded:
+console.log('[Chatterbox] swear filter v3 + last-seen loaded');
 
-// Pre-normalize every bad word once
-const NORMALIZED_BAD = BAD_WORDS.map(w => {
-  // treat * and _ as optional single chars before normalizing
-  const withWild = w.replace(/\*/g, '.').replace(/_/g, '.');
-  return normalizeSwear(withWild);
-}).filter(w => w.length >= 2);
-
-// Also keep a direct regex for exact / lightly masked forms
-function makeBadRegex(words) {
-  const parts = words.map(w => {
-    let pat = w.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
-    pat = pat.replace(/\*/g, '.').replace(/_/g, '.');
-    return pat;
-  });
-  return new RegExp('(?:^|[^a-z0-9])(' + parts.join('|') + ')(?=[^a-z0-9]|$)', 'i');
+// Turn a word into a regex that allows repeated letters and simple masks.
+// "damn" → /d+a+m+n+/i  matches "daamn", "daaaammmnnn", etc.
+function wordToFlexRegex(w) {
+  const chars = w.toLowerCase().split('');
+  let pat = '';
+  for (const ch of chars) {
+    if (ch === '*' || ch === '_') pat += '.?';
+    else if (/[a-z0-9]/.test(ch)) pat += ch + '+';
+    else pat += '\\' + ch;
+  }
+  return pat;
 }
-const BAD_RE = makeBadRegex(BAD_WORDS);
+const BAD_FLEX_RE = new RegExp(
+  '(?:^|[^a-z0-9])(' + BAD_WORDS.map(wordToFlexRegex).join('|') + ')(?=[^a-z0-9]|$)', 'i'
+);
 
 function containsBadWords(text) {
   if (!text) return false;
   const raw = String(text);
-  // 1) direct / lightly masked match
-  if (BAD_RE.test(raw)) return true;
-  // 2) normalized match (catches elongated + masked forms)
-  //    split into words so "hell" does not match inside "hello"
-  const norm = normalizeSwear(raw);
-  const tokens = norm.split(/[^a-z0-9]+/).filter(Boolean);
-  for (const t of tokens) {
-    if (NORMALIZED_BAD.includes(t)) return true;
-  }
-  // also check the whole normalized string for multi-word phrases if needed
-  if (NORMALIZED_BAD.some(b => b.length >= 3 && norm.includes(b) && new RegExp('(?:^|[^a-z0-9])' + b + '(?=[^a-z0-9]|$)').test(norm))) {
-    return true;
-  }
+  if (BAD_FLEX_RE.test(raw)) return true;
+  // strip spaces + mask chars so "f u c k", "f.ck", "d a a m n" are caught
+  const stripped = raw.replace(/[\s.*_\-]/g, '');
+  if (BAD_FLEX_RE.test(stripped)) return true;
+  // collapsed-letter safety net
+  const collapsed = stripped.replace(/(.)\1+/gi, '$1');
+  if (collapsed.length >= 2 && BAD_FLEX_RE.test(collapsed)) return true;
   return false;
 }
 
@@ -536,13 +524,39 @@ function convTitle(c) {
   const o = c.conversation_members.find(m => m.user_id !== me.id);
   return o?.profiles?.display_name || 'Chat';
 }
+function fmtLastSeen(ts) {
+  if (!ts) return 'offline';
+  const t = new Date(ts).getTime();
+  if (!t || isNaN(t)) return 'offline';
+  const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (sec < 60) return 'last seen just now';
+  if (sec < 3600) {
+    const m = Math.floor(sec / 60);
+    return 'last seen ' + m + (m === 1 ? ' min ago' : ' mins ago');
+  }
+  if (sec < 86400) {
+    const h = Math.floor(sec / 3600);
+    return 'last seen ' + h + (h === 1 ? ' hour ago' : ' hours ago');
+  }
+  if (sec < 86400 * 7) {
+    const d = Math.floor(sec / 86400);
+    return 'last seen ' + d + (d === 1 ? ' day ago' : ' days ago');
+  }
+  return 'last seen ' + new Date(ts).toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
+
 function convSub(c) {
   if (c.is_group) {
     const k = c.conversation_members.filter(m => m.user_id !== me.id && online.has(m.user_id)).length;
     return c.conversation_members.length + ' members · ' + k + ' online';
   }
   const o = c.conversation_members.find(m => m.user_id !== me.id);
-  return o?.profiles ? '@' + o.profiles.username + (online.has(o.user_id) ? ' · online' : '') : '';
+  if (!o?.profiles) return '';
+  const handle = '@' + o.profiles.username;
+  if (online.has(o.user_id)) return handle + ' · online';
+  // offline — show last seen from profile cache if we have it
+  const last = o.profiles.last_seen || profiles[o.user_id]?.last_seen;
+  return handle + ' · ' + fmtLastSeen(last);
 }
 async function nameOf(id) {
   if (profiles[id]) return profiles[id];
@@ -641,10 +655,22 @@ async function openConv(id) {
   stopRec(true); clearPending();
   const c = getConv(id);
   if (!c) return;
+  // refresh the other person's profile so last_seen is up to date
+  const otherId = dmOther(c);
+  if (otherId && !online.has(otherId)) {
+    try {
+      const { data: p } = await sb.from('profiles').select('*').eq('id', otherId).maybeSingle();
+      if (p) {
+        profiles[p.id] = p;
+        const mem = c.conversation_members.find(m => m.user_id === otherId);
+        if (mem) mem.profiles = p;
+      }
+    } catch (_) {}
+  }
   $('#chTitle').textContent = convTitle(c);
   $('#chSub').textContent = convSub(c);
   setAv($('#chAv'), convAvatar(c), convTitle(c));
-  $('#chAv').dataset.uid = dmOther(c);
+  $('#chAv').dataset.uid = otherId || '';
   refreshOnline();
   showChat(true);
   render();
@@ -1332,15 +1358,36 @@ function openAvatarMaker({ name, onSave, onCancel }) {
 }
 
 /* ================================================================
-   ONLINE STATUS (who is on right now)
+   ONLINE STATUS (who is on right now) + last seen
+   Requires a last_seen timestamptz column on public.profiles:
+     alter table public.profiles add column if not exists last_seen timestamptz;
    ================================================================ */
 let online = new Set();
 let presenceCh = null;
+let lastSeenTimer = null;
 
 function dmOther(c) { return c.is_group ? '' : (c.conversation_members.find(m => m.user_id !== me.id)?.user_id || ''); }
+
 function refreshOnline() {
-  document.querySelectorAll('.av[data-uid]').forEach(e => e.classList.toggle('online', !!e.dataset.uid && online.has(e.dataset.uid)));
+  document.querySelectorAll('.av[data-uid]').forEach(e => {
+    const uid = e.dataset.uid;
+    const isOn = !!uid && online.has(uid);
+    e.classList.toggle('online', isOn);
+    // red offline dot only when we know the person (have a uid) and they are offline
+    e.classList.toggle('offline', !!uid && !isOn);
+  });
 }
+
+async function bumpLastSeen() {
+  if (!me) return;
+  const now = new Date().toISOString();
+  try {
+    await sb.from('profiles').update({ last_seen: now }).eq('id', me.id);
+    if (myProfile) myProfile.last_seen = now;
+    if (profiles[me.id]) profiles[me.id].last_seen = now;
+  } catch (_) {}
+}
+
 function startPresence() {
   stopPresence();
   presenceCh = sb.channel('lobby', { config: { presence: { key: me.id } } });
@@ -1350,9 +1397,27 @@ function startPresence() {
     refreshOnline();
     const c = activeId && getConv(activeId); if (c) $('#chSub').textContent = convSub(c);
     if (call) renderCallPeople();
-  }).subscribe(async status => { if (status === 'SUBSCRIBED') await presenceCh.track({ at: Date.now() }); });
+  }).subscribe(async status => {
+    if (status === 'SUBSCRIBED') {
+      await presenceCh.track({ at: Date.now() });
+      bumpLastSeen();
+    }
+  });
+  // heartbeat every 45s so last_seen stays fresh while the tab is open
+  clearInterval(lastSeenTimer);
+  lastSeenTimer = setInterval(bumpLastSeen, 45000);
+  // try to write last_seen when the tab is closed / hidden
+  window.addEventListener('pagehide', bumpLastSeen);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') bumpLastSeen();
+  });
 }
-function stopPresence() { if (presenceCh) { sb.removeChannel(presenceCh); presenceCh = null; } online = new Set(); }
+function stopPresence() {
+  if (presenceCh) { sb.removeChannel(presenceCh); presenceCh = null; }
+  online = new Set();
+  clearInterval(lastSeenTimer);
+  lastSeenTimer = null;
+}
 
 /* ================================================================
    VOICE + VIDEO CALLS (WebRTC, everyone connects to everyone)
