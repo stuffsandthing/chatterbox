@@ -263,6 +263,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
     <div class="me-bar">
       <div class="av" id="meAv"></div>
       <div class="who"><b id="meName"></b><span id="meUser"></span></div>
+      <button class="btn ghost small" id="soundBtn" title="Message sound on/off">🔔</button>
       <button class="btn ghost small" id="logout">Log out</button>
     </div>
     <div class="tabs">
@@ -822,6 +823,7 @@ async function sendText() {
     body = cleanOrBlock(body);
     if (body === null) return;
   }
+  if (!spamOk(body)) return;
   const cid = activeId;
   let repId = replyTo ? replyTo.id : null;
   sending = true; $('#send').disabled = true;
@@ -948,6 +950,7 @@ function subscribe() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async p => {
       const m = p.new;
       if (m.sender_id === me.id && m.conversation_id === activeId) return;
+      if (m.sender_id !== me.id) notifyIncoming(m);
       if (!getConv(m.conversation_id)) await loadConvs();
       if (call && m.conversation_id === call.convId) callChatAdd(m);
       if (m.conversation_id === activeId) appendMsg(m);
@@ -1125,6 +1128,92 @@ window.addEventListener('resize', closeMsgMenu);
 document.addEventListener('click', e => {
   if (msgMenuFor && !e.target.closest('#msgMenu') && !e.target.closest('#msgs .msg')) closeMsgMenu();
 });
+
+/* ================================================================
+   ANTI-SPAM  (the database enforces it too: see spam-limit.sql)
+   ================================================================ */
+const SPAM_MAX = 5;            // messages allowed...
+const SPAM_WINDOW = 10000;     // ...in this many milliseconds
+const DUP_WINDOW = 20000;      // same text twice within this long is blocked
+let sendTimes = [], lastSent = { body: '', at: 0 };
+
+function spamOk(body, inCall) {
+  const now = Date.now();
+  sendTimes = sendTimes.filter(t => now - t < SPAM_WINDOW);
+  let why = '';
+  if (sendTimes.length >= SPAM_MAX) {
+    const wait = Math.max(1, Math.ceil((SPAM_WINDOW - (now - sendTimes[0])) / 1000));
+    why = 'Slow down! You can send again in ' + wait + 's.';
+  } else if (body && body === lastSent.body && now - lastSent.at < DUP_WINDOW) {
+    why = 'You just sent that. Wait a bit before repeating it.';
+  }
+  if (why) {
+    if (inCall) {
+      const ta = $('#ccText'), old = ta.dataset.ph || ta.placeholder;
+      ta.dataset.ph = old; ta.placeholder = why;
+      setTimeout(() => { ta.placeholder = old; }, 2500);
+    } else {
+      limitNote(why, true);
+      clearTimeout(limitTimer);
+      limitTimer = setTimeout(() => checkLimit(false), 3000);
+    }
+    return false;
+  }
+  sendTimes.push(now);
+  if (body) lastSent = { body, at: now };
+  return true;
+}
+
+/* ================================================================
+   NEW-MESSAGE DING + tab title count
+   ================================================================ */
+const BASE_TITLE = document.title;
+let soundOn = true, lastDing = 0, unseen = 0;
+try { soundOn = localStorage.getItem('chatterbox-sound') !== 'off'; } catch {}
+
+function paintSound() {
+  const b = $('#soundBtn'); if (!b) return;
+  b.textContent = soundOn ? '🔔' : '🔕';
+  b.title = soundOn ? 'Message sound is on (click to mute)' : 'Message sound is off (click to turn on)';
+}
+paintSound();
+$('#soundBtn').onclick = () => {
+  soundOn = !soundOn;
+  try { localStorage.setItem('chatterbox-sound', soundOn ? 'on' : 'off'); } catch {}
+  paintSound();
+  if (soundOn) { lastDing = 0; playDing(); }   // little preview so you know it works
+};
+
+function playDing() {
+  if (!soundOn || !ac) return;
+  const now = Date.now();
+  if (now - lastDing < 1500) return;           // a flood of messages = one ding, not machine-gun noise
+  lastDing = now;
+  try {
+    if (ac.state === 'suspended') ac.resume();
+    const t0 = ac.currentTime;
+    [[880, 0], [1318.5, 0.09]].forEach(([freq, d]) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(0.0001, t0 + d);
+      g.gain.exponentialRampToValueAtTime(0.18, t0 + d + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.35);
+      o.start(t0 + d); o.stop(t0 + d + 0.4);
+    });
+  } catch {}
+}
+
+function notifyIncoming(m) {
+  const away = document.hidden || !document.hasFocus();
+  const watching = !away && m.conversation_id === activeId;
+  if (watching) return;                         // you're looking right at it
+  playDing();
+  if (away) { unseen++; document.title = '(' + unseen + ') ' + BASE_TITLE; }
+}
+function resetTitle() { unseen = 0; document.title = BASE_TITLE; }
+window.addEventListener('focus', resetTitle);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resetTitle(); });
 
 /* ---------------- MODALS ---------------- */
 function openModal(html) { $('#modal').innerHTML = html; $('#modalWrap').classList.remove('hidden'); }
@@ -1684,7 +1773,9 @@ const others = c => (getConv(c.convId)?.conversation_members || []).map(m => m.u
 const nameFor = u => profiles[u]?.display_name || 'Someone';
 
 /* ---- ringtone ---- */
-document.addEventListener('pointerdown', () => { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch {} }, { once: true });
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => {
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch {}
+}, { passive: true }));
 function startRing() {
   stopRing();
   const beep = () => {
@@ -2036,6 +2127,7 @@ async function sendCallMsg() {
   if (!body || !call) return;
   body = cleanOrBlock(body);
   if (body === null) return;
+  if (!spamOk(body, true)) return;
   const c = call;
   t.value = '';
   const { data, error } = await sb.from('messages').insert({ conversation_id: c.convId, sender_id: me.id, body }).select().single();
