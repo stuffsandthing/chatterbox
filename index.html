@@ -177,6 +177,32 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 #mkLayer .lbl2{font-size:12px;color:var(--muted);margin-top:8px}
 #mkLayer input[type=range]{width:100%}
 
+/* replies + reactions */
+.msg{cursor:pointer}
+.msg.flash{animation:flash 1.4s}
+@keyframes flash{0%,55%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+.msg .quote{border-left:3px solid var(--accent);background:rgba(0,0,0,.07);border-radius:6px;padding:4px 8px;margin-bottom:5px;font-size:13px;max-width:100%}
+.msg .quote b{display:block;font-size:12px;color:var(--accent)}
+.msg .quote span{display:block;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msg.me .quote{background:rgba(255,255,255,.18);border-left-color:#fff}
+.msg.me .quote b{color:#fff}
+.reacts{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.rx{display:inline-flex;align-items:center;gap:4px;border:1px solid transparent;background:rgba(0,0,0,.1);border-radius:999px;padding:1px 8px;font-size:14px;line-height:1.5}
+.rx small{font-size:12px}
+.rx.mine{border-color:var(--accent)}
+.msg.me .rx{background:rgba(255,255,255,.2)}
+.msg.me .rx.mine{border-color:#fff}
+#msgMenu{position:fixed;z-index:25;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.35);padding:6px;display:flex;flex-direction:column;gap:6px;max-width:min(320px,94vw)}
+#msgMenu .er{display:flex;gap:2px;flex-wrap:wrap}
+#msgMenu .er button{background:none;border:0;font-size:22px;padding:4px 6px;border-radius:8px;line-height:1}
+#msgMenu .er button:hover,#msgMenu .er button.sel{background:var(--bg)}
+#msgMenu .ac{display:flex;gap:6px}
+#replyBar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line)}
+#replyBar .rb{flex:1;min-width:0;border-left:3px solid var(--accent);padding-left:8px}
+#replyBar .rb b{display:block;font-size:12px;color:var(--accent)}
+#replyBar .rb span{display:block;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#replyBar .x{background:none;border:0;font-size:22px;line-height:1;color:var(--muted);padding:0 4px}
+
 /* modal */
 #modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
 #modal{background:var(--panel);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;border:1px solid var(--line)}
@@ -264,6 +290,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
       <div id="limitNote" class="hidden"></div>
       <div id="pending" class="hidden"></div>
       <div id="recBar" class="hidden"><span class="recdot"></span><span>Recording… <b id="recTime">0:00</b></span><button class="btn ghost small" id="recCancel" style="margin-left:auto">Cancel</button></div>
+      <div id="replyBar" class="hidden"><div class="rb"><b id="rbName"></b><span id="rbText"></span></div><button class="x" id="rbX" title="Cancel reply">×</button></div>
       <div id="composer">
         <button class="btn ghost" id="attach" title="Attach a file">📎</button>
         <button class="btn ghost" id="mic" title="Record a voice message">🎤</button>
@@ -361,7 +388,7 @@ function wordToFlexRegex(w) {
   const chars = w.toLowerCase().split('');
   let pat = '';
   for (const ch of chars) {
-    if (ch === '*' || ch === '_') pat += '.?';
+    if (ch === '*' || ch === '_') pat += '[*_.\\-@#$%!]';   // a mask character must really be there
     else if (/[a-z0-9]/.test(ch)) pat += ch + '+';
     else pat += '\\' + ch;
   }
@@ -416,6 +443,7 @@ let tab = 'chats';
 let unread = new Set();
 let channel = null;
 let lastDay = '';
+let reactCh = null, msgCache = {}, reacts = {}, replyTo = null, msgMenuFor = null;
 
 /* ---------------- AUTH ---------------- */
 let signupMode = false;
@@ -492,6 +520,7 @@ async function startApp(user) {
 function stopApp() {
   stopCalls();
   if (channel) { sb.removeChannel(channel); channel = null; }
+  if (reactCh) { sb.removeChannel(reactCh); reactCh = null; }
   me = null; myProfile = null; convs = []; contacts = []; activeId = null; profiles = {}; unread.clear();
   $('#app').classList.add('hidden'); $('#app').classList.remove('show-chat');
   $('#auth').classList.remove('hidden');
@@ -652,7 +681,7 @@ $('#back').onclick = () => { activeId = null; showChat(false); render(); };
 
 async function openConv(id) {
   activeId = id; unread.delete(id);
-  stopRec(true); clearPending();
+  stopRec(true); clearPending(); clearReply(); closeMsgMenu();
   const c = getConv(id);
   if (!c) return;
   // refresh the other person's profile so last_seen is up to date
@@ -674,8 +703,10 @@ async function openConv(id) {
   refreshOnline();
   showChat(true);
   render();
-  $('#msgs').innerHTML = ''; lastDay = '';
-  const { data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(300);   // newest 300...
+  $('#msgs').innerHTML = ''; lastDay = ''; msgCache = {}; reacts = {};
+  let { data, error: qerr } = await sb.from('messages').select('*, message_reactions(user_id,emoji)').eq('conversation_id', id).order('created_at', { ascending: false }).limit(300);
+  // if reactions-setup.sql hasn't been run yet, fall back to plain messages so chat still works
+  if (qerr) ({ data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(300));   // newest 300...
   if (activeId !== id) return;
   for (const m of (data || []).reverse()) await appendMsg(m, false);          // ...shown oldest-first
   scrollDown();
@@ -685,6 +716,7 @@ function scrollDown() { const m = $('#msgs'); m.scrollTop = m.scrollHeight; }
 
 async function appendMsg(m, scroll = true) {
   if (document.querySelector(`[data-mid="${m.id}"]`)) return;
+  msgCache[m.id] = m;
   const box = $('#msgs');
   const day = fmtDay(m.created_at);
   if (day !== lastDay) { lastDay = day; box.insertAdjacentHTML('beforeend', `<div class="daysep">${esc(day)}</div>`); }
@@ -702,12 +734,23 @@ async function appendMsg(m, scroll = true) {
       ? `<img data-path="${esc(m.file_path)}" data-name="${esc(m.file_name)}" alt="${esc(m.file_name)}" style="cursor:zoom-in">`
       : `<a class="file" data-path="${esc(m.file_path)}" data-dl="${esc(m.file_name)}" href="#">📎 <span>${esc(m.file_name)}<br><small>${fmtSize(m.file_size || 0)}</small></span></a>`;
   }
+  let quote = '';
+  if (m.reply_to) {
+    const q = await quoteInfo(m.reply_to);
+    if (q) {
+      const qn = q.sender_id === me.id ? 'You' : (await nameOf(q.sender_id)).display_name;
+      quote = `<div class="quote" data-q="${esc(q.id)}"><b>${esc(qn)}</b><span>${esc(msgSnippet(q))}</span></div>`;
+    }
+  }
   const delBtn = mine ? `<button class="del-msg" title="Delete your message" data-mid="${m.id}">🗑️</button>` : '';
   const div = document.createElement('div');
   div.className = 'msg' + (mine ? ' me' : '');
   div.dataset.mid = m.id;
-  div.innerHTML = `${name}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="tm">${fmtTime(m.created_at)}${delBtn}</div>`;
+  div.innerHTML = `${name}${quote}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="reacts hidden"></div><div class="tm">${fmtTime(m.created_at)}${delBtn}</div>`;
   box.appendChild(div);
+  if (Array.isArray(m.message_reactions)) reacts[m.id] = m.message_reactions.map(r => ({ user_id: r.user_id, emoji: r.emoji }));
+  else if (!reacts[m.id]) reacts[m.id] = [];
+  renderReacts(m.id);
   if (mine) {
     const btn = div.querySelector('.del-msg');
     if (btn) btn.onclick = (e) => { e.stopPropagation(); deleteOwnMessage(m.id, m.file_path); };
@@ -780,12 +823,14 @@ async function sendText() {
     if (body === null) return;
   }
   const cid = activeId;
+  let repId = replyTo ? replyTo.id : null;
   sending = true; $('#send').disabled = true;
   try {
     if (!pending.length) {
       t.value = ''; t.style.height = 'auto';
-      const { data, error } = await sb.from('messages').insert({ conversation_id: cid, sender_id: me.id, body }).select().single();
+      const { data, error } = await sb.from('messages').insert({ conversation_id: cid, sender_id: me.id, body, ...(repId ? { reply_to: repId } : {}) }).select().single();
       if (error) { t.value = body; return alert(error.message); }
+      clearReply();
       if (activeId === cid) appendMsg(data);
     } else {
       const st = $('#upStatus'); st.classList.remove('hidden');
@@ -800,9 +845,11 @@ async function sendText() {
         if (up.error) { alert('Upload failed: ' + up.error.message); break; }
         const { data, error } = await sb.from('messages').insert({
           conversation_id: cid, sender_id: me.id, body: caption,
-          file_path: path, file_name: f.name, file_type: f.type, file_size: f.size
+          file_path: path, file_name: f.name, file_type: f.type, file_size: f.size,
+          ...(repId ? { reply_to: repId } : {})
         }).select().single();
         if (error) { alert(error.message); break; }
+        if (repId) { repId = null; clearReply(); }
         if (caption) { t.value = ''; t.style.height = 'auto'; caption = ''; }
         removePending(it);
         if (activeId === cid) appendMsg(data);
@@ -890,7 +937,7 @@ function closeLightbox() { $('#lightbox').classList.add('hidden'); $('#lbImg').r
 $('#lbClose').onclick = closeLightbox;
 $('#lightbox').onclick = e => { if (e.target.id === 'lightbox') closeLightbox(); };
 $('#lbImg').onclick = e => { e.stopPropagation(); e.target.classList.toggle('zoomed'); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLightbox(); closeModal(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLightbox(); closeModal(); closeMsgMenu(); } });
 
 async function bumpConv(id) { await loadConvs(); if (tab === 'chats') renderChats(); }
 
@@ -917,7 +964,167 @@ function subscribe() {
       await loadConvs(); if (tab === 'chats') renderChats();
     })
     .subscribe();
+
+  // reactions use their own channel so a missing table can never break chat itself
+  if (reactCh) sb.removeChannel(reactCh);
+  reactCh = sb.channel('react-' + me.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, p => applyReaction(true, p.new))
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, p => applyReaction(false, p.old))
+    .subscribe();
 }
+
+/* ================================================================
+   REPLIES + REACTIONS
+   Needs reactions-setup.sql to have been run once in Supabase.
+   Click / tap a message to open the menu (reactions, reply, copy).
+   ================================================================ */
+const QUICK_REACTS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+const MORE_REACTS = ['🔥', '🎉', '👏', '😍', '🤔', '😡', '💯', '👀', '🥳', '😭', '🤣', '👎', '✅', '❌', '🤝', '💀'];
+
+function msgSnippet(m) {
+  if (m.body) return m.body.replace(/\s+/g, ' ').slice(0, 100);
+  const t = m.file_type || '';
+  if (t.startsWith('audio/')) return '🎤 Voice message';
+  if (t.startsWith('image/')) return '🖼️ Photo';
+  if (m.file_name) return '📎 ' + m.file_name;
+  return 'Message';
+}
+
+async function quoteInfo(id) {
+  if (msgCache[id]) return msgCache[id];
+  const { data } = await sb.from('messages').select('id,sender_id,body,file_name,file_type').eq('id', id).maybeSingle();
+  if (data) msgCache[id] = data;
+  return data;
+}
+
+function jumpTo(id) {
+  const t = document.querySelector('.msg[data-mid="' + id + '"]');
+  if (!t) return alert('That message is older than the ones loaded in this chat.');
+  t.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash');
+  setTimeout(() => t.classList.remove('flash'), 1500);
+}
+
+/* ---- reply bar ---- */
+async function setReply(m) {
+  replyTo = m;
+  const who = m.sender_id === me.id ? 'yourself' : (await nameOf(m.sender_id)).display_name;
+  if (replyTo !== m) return;
+  $('#rbName').textContent = 'Replying to ' + who;
+  $('#rbText').textContent = msgSnippet(m);
+  $('#replyBar').classList.remove('hidden');
+  $('#text').focus();
+}
+function clearReply() { replyTo = null; $('#replyBar').classList.add('hidden'); }
+$('#rbX').onclick = clearReply;
+
+/* ---- reactions ---- */
+function renderReacts(mid) {
+  const div = document.querySelector('.msg[data-mid="' + mid + '"]');
+  if (!div) return;
+  const box = div.querySelector('.reacts'); if (!box) return;
+  const list = reacts[mid] || [];
+  const groups = {};
+  list.forEach(r => { (groups[r.emoji] = groups[r.emoji] || []).push(r.user_id); });
+  box.innerHTML = '';
+  box.classList.toggle('hidden', !list.length);
+  Object.entries(groups).forEach(([emoji, users]) => {
+    const b = document.createElement('button');
+    b.className = 'rx' + (users.includes(me.id) ? ' mine' : '');
+    b.title = users.map(u => u === me.id ? 'You' : nameFor(u)).join(', ');
+    b.innerHTML = esc(emoji) + (users.length > 1 ? ' <small>' + users.length + '</small>' : '');
+    b.onclick = ev => { ev.stopPropagation(); toggleReaction(mid, emoji); };
+    box.appendChild(b);
+  });
+}
+
+async function toggleReaction(mid, emoji) {
+  const list = reacts[mid] = reacts[mid] || [];
+  const i = list.findIndex(r => r.user_id === me.id && r.emoji === emoji);
+  if (i >= 0) {
+    list.splice(i, 1); renderReacts(mid);
+    const { error } = await sb.from('message_reactions').delete().eq('message_id', mid).eq('user_id', me.id).eq('emoji', emoji);
+    if (error) { list.push({ user_id: me.id, emoji }); renderReacts(mid); alert('Could not remove the reaction: ' + error.message); }
+  } else {
+    list.push({ user_id: me.id, emoji }); renderReacts(mid);
+    const { error } = await sb.from('message_reactions').insert({ message_id: mid, user_id: me.id, emoji });
+    if (error) {
+      const j = list.findIndex(r => r.user_id === me.id && r.emoji === emoji);
+      if (j >= 0) list.splice(j, 1);
+      renderReacts(mid);
+      alert('Could not react: ' + error.message + '\n\nHave you run reactions-setup.sql in Supabase?');
+    }
+  }
+}
+
+function applyReaction(add, row) {
+  if (!row || !row.message_id) return;
+  if (!document.querySelector('.msg[data-mid="' + row.message_id + '"]')) return;   // not on screen
+  const list = reacts[row.message_id] = reacts[row.message_id] || [];
+  const i = list.findIndex(r => r.user_id === row.user_id && r.emoji === row.emoji);
+  if (add && i < 0) list.push({ user_id: row.user_id, emoji: row.emoji });
+  if (!add && i >= 0) list.splice(i, 1);
+  renderReacts(row.message_id);
+}
+
+/* ---- the little menu that pops up when you click a message ---- */
+function closeMsgMenu() {
+  document.getElementById('msgMenu')?.remove();
+  msgMenuFor = null;
+}
+function placeMenu(menu, div) {
+  const r = div.getBoundingClientRect(), mw = menu.offsetWidth, mh = menu.offsetHeight;
+  let top = r.top - mh - 6;
+  if (top < 8) top = r.bottom + 6;
+  if (top + mh > innerHeight - 8) top = Math.max(8, innerHeight - mh - 8);
+  let left = div.classList.contains('me') ? r.right - mw : r.left;
+  left = Math.min(Math.max(8, left), Math.max(8, innerWidth - mw - 8));
+  menu.style.top = top + 'px'; menu.style.left = left + 'px';
+}
+function openMsgMenu(div) {
+  closeMsgMenu();
+  const mid = div.dataset.mid, m = msgCache[mid];
+  if (!m) return;
+  msgMenuFor = mid;
+  const mineSet = new Set((reacts[mid] || []).filter(r => r.user_id === me.id).map(r => r.emoji));
+  const btn = e => `<button data-e="${e}" class="${mineSet.has(e) ? 'sel' : ''}">${e}</button>`;
+  const menu = document.createElement('div');
+  menu.id = 'msgMenu';
+  menu.innerHTML = `<div class="er">${QUICK_REACTS.map(btn).join('')}<button data-more="1" title="More reactions">➕</button></div>
+    <div class="ac"><button class="btn ghost small" data-act="reply">↩ Reply</button>${m.body ? '<button class="btn ghost small" data-act="copy">Copy</button>' : ''}</div>`;
+  document.body.appendChild(menu);
+  placeMenu(menu, div);
+  menu.onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    e.stopPropagation();
+    if (b.dataset.e) { closeMsgMenu(); toggleReaction(mid, b.dataset.e); }
+    else if (b.dataset.more) {
+      b.remove();
+      menu.querySelector('.er').insertAdjacentHTML('beforeend', MORE_REACTS.map(btn).join(''));
+      placeMenu(menu, div);
+    }
+    else if (b.dataset.act === 'reply') { closeMsgMenu(); setReply(m); }
+    else if (b.dataset.act === 'copy') {
+      try { await navigator.clipboard.writeText(m.body); } catch { alert('Couldn’t copy automatically. Select the text and copy it by hand.'); }
+      closeMsgMenu();
+    }
+  };
+}
+
+$('#msgs').addEventListener('click', e => {
+  const div = e.target.closest('.msg'); if (!div) return;
+  const q = e.target.closest('.quote');
+  if (q) { closeMsgMenu(); jumpTo(q.dataset.q); return; }
+  if (e.target.closest('a,img,audio,button')) { closeMsgMenu(); return; }   // links, photos, players, buttons do their own thing
+  if (String(window.getSelection()).length) return;                          // they're selecting text, don't interrupt
+  if (msgMenuFor === div.dataset.mid) return closeMsgMenu();
+  openMsgMenu(div);
+});
+$('#msgs').addEventListener('scroll', closeMsgMenu);
+window.addEventListener('resize', closeMsgMenu);
+document.addEventListener('click', e => {
+  if (msgMenuFor && !e.target.closest('#msgMenu') && !e.target.closest('#msgs .msg')) closeMsgMenu();
+});
 
 /* ---------------- MODALS ---------------- */
 function openModal(html) { $('#modal').innerHTML = html; $('#modalWrap').classList.remove('hidden'); }
