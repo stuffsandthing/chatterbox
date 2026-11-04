@@ -177,6 +177,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 #mkLayer .lbl2{font-size:12px;color:var(--muted);margin-top:8px}
 #mkLayer input[type=range]{width:100%}
 
+#soundHint{padding:7px 14px;font-size:12px;background:var(--bg);color:var(--muted);border-bottom:1px solid var(--line);cursor:pointer}
 /* replies + reactions */
 .msg{cursor:pointer}
 .msg.flash{animation:flash 1.4s}
@@ -266,6 +267,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
       <button class="btn ghost small" id="soundBtn" title="Message sound on/off">🔔</button>
       <button class="btn ghost small" id="logout">Log out</button>
     </div>
+    <div id="soundHint" class="hidden">🔔 Click anywhere on this page once to turn on message sounds</div>
     <div class="tabs">
       <button id="tabChats" class="on">Chats</button>
       <button id="tabPeople">People</button>
@@ -381,7 +383,7 @@ const BAD_WORDS = [
 ];
 
 // Filter version — open the browser console, you should see this if the new file loaded:
-console.log('[Chatterbox] swear filter v3 + last-seen loaded');
+console.log('[Chatterbox] swear filter v3 + last-seen + sound v2 loaded');
 
 // Turn a word into a regex that allows repeated letters and simple masks.
 // "damn" → /d+a+m+n+/i  matches "daamn", "daaaammmnnn", etc.
@@ -515,6 +517,7 @@ async function startApp(user) {
   subscribe();
   startPresence();
   startSignals();
+  if (soundOn && !ac) $('#soundHint').classList.remove('hidden');
   if (showCodeAfterStart) { showCodeAfterStart = false; showRecoveryCode(true); }
 }
 
@@ -1197,9 +1200,9 @@ function playDing() {
       o.type = 'sine'; o.frequency.value = freq;
       o.connect(g); g.connect(ac.destination);
       g.gain.setValueAtTime(0.0001, t0 + d);
-      g.gain.exponentialRampToValueAtTime(0.18, t0 + d + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.35);
-      o.start(t0 + d); o.stop(t0 + d + 0.4);
+      g.gain.exponentialRampToValueAtTime(0.5, t0 + d + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.5);
+      o.start(t0 + d); o.stop(t0 + d + 0.55);
     });
   } catch {}
 }
@@ -1207,6 +1210,7 @@ function playDing() {
 function notifyIncoming(m) {
   const away = document.hidden || !document.hasFocus();
   const watching = !away && m.conversation_id === activeId;
+  console.log('[Chatterbox] message from someone else — sound on:', soundOn, '| audio:', ac ? ac.state : 'not unlocked (click the page once)', '| tab away:', away, '| watching this chat:', watching);
   if (watching) return;                         // you're looking right at it
   playDing();
   if (away) { unseen++; document.title = '(' + unseen + ') ' + BASE_TITLE; }
@@ -1774,7 +1778,7 @@ const nameFor = u => profiles[u]?.display_name || 'Someone';
 
 /* ---- ringtone ---- */
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => {
-  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch {}
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); document.getElementById('soundHint')?.classList.add('hidden'); } catch {}
 }, { passive: true }));
 function startRing() {
   stopRing();
