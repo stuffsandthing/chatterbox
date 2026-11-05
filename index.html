@@ -379,7 +379,7 @@ input[type=number]:focus{border-color:var(--accent)}
    ================================================================ */
 const SUPABASE_URL = 'https://cylppnwhdeqaflktoyya.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHBwbndoZGVxYWZsa3RveXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzNzk1NzEsImV4cCI6MjEwODk1NTU3MX0.Tqaa7Ny4C64s5SKLFEui_jX_7d3lIADfATtyvUPuK_U';
-const MAX_FILE_MB = 25;
+const MAX_FILE_MB = 10;
 const MAX_LINES = 10;      // longest message you can send, in lines
 const MAX_CHARS = 1000;    // ...and in characters
 const BUCKET = 'chat-files';
@@ -748,9 +748,9 @@ async function openConv(id) {
   showChat(true);
   render();
   $('#msgs').innerHTML = ''; lastDay = ''; msgCache = {}; reacts = {};
-  let { data, error: qerr } = await sb.from('messages').select('*, message_reactions(user_id,emoji)').eq('conversation_id', id).order('created_at', { ascending: false }).limit(300);
+  let { data, error: qerr } = await sb.from('messages').select('*, message_reactions(user_id,emoji)').eq('conversation_id', id).order('created_at', { ascending: false }).limit(150);
   // if reactions-setup.sql hasn't been run yet, fall back to plain messages so chat still works
-  if (qerr) ({ data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(300));   // newest 300...
+  if (qerr) ({ data } = await sb.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: false }).limit(150));   // newest 150...
   if (activeId !== id) return;
   for (const m of (data || []).reverse()) await appendMsg(m, false);          // ...shown oldest-first
   scrollDown();
@@ -773,7 +773,7 @@ async function appendMsg(m, scroll = true) {
     const isImg = (m.file_type || '').startsWith('image/');
     const isAud = (m.file_type || '').startsWith('audio/');
     file = isAud
-      ? `<audio controls preload="metadata" data-path="${esc(m.file_path)}"></audio>`
+      ? `<button class="btn ghost small play-voice" data-path="${esc(m.file_path)}" type="button">🎤 Play voice message${m.file_size ? ' · ' + fmtSize(m.file_size) : ''}</button>`
       : isImg
       ? `<img data-path="${esc(m.file_path)}" data-name="${esc(m.file_name)}" alt="${esc(m.file_name)}" style="cursor:zoom-in">`
       : `<a class="file" data-path="${esc(m.file_path)}" data-dl="${esc(m.file_name)}" href="#">📎 <span>${esc(m.file_name)}<br><small>${fmtSize(m.file_size || 0)}</small></span></a>`;
@@ -799,13 +799,43 @@ async function appendMsg(m, scroll = true) {
     const btn = div.querySelector('.del-msg');
     if (btn) btn.onclick = (e) => { e.stopPropagation(); deleteOwnMessage(m.id, m.file_path); };
   }
+  // Images + normal files: load signed URL now. Voice notes: only when the user presses Play.
   div.querySelectorAll('[data-path]').forEach(async el => {
+    if (el.classList.contains('play-voice')) return;   // handled on click
     const dl = el.dataset.dl ? { download: el.dataset.dl } : undefined;
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(el.dataset.path, 3600, dl);
     if (!data) return;
     if (el.tagName === 'IMG') { el.src = data.signedUrl; el.onclick = () => openLightbox(data.signedUrl, el.dataset.path, el.dataset.name); el.onload = () => { if (scroll) scrollDown(); }; }
-    else if (el.tagName === 'AUDIO') el.src = data.signedUrl;
     else el.href = data.signedUrl;
+  });
+  div.querySelectorAll('.play-voice').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (btn.dataset.loading) return;
+      btn.dataset.loading = '1';
+      btn.disabled = true;
+      btn.textContent = 'Loading…';
+      try {
+        const { data } = await sb.storage.from(BUCKET).createSignedUrl(btn.dataset.path, 3600);
+        if (!data?.signedUrl) throw new Error('Could not load audio');
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.preload = 'auto';
+        audio.src = data.signedUrl;
+        audio.style.width = '260px';
+        audio.style.maxWidth = '100%';
+        audio.style.display = 'block';
+        audio.style.marginBottom = '4px';
+        btn.replaceWith(audio);
+        audio.play().catch(() => {});
+        if (scroll) scrollDown();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '🎤 Play voice message';
+        delete btn.dataset.loading;
+        alert('Could not load the voice message.');
+      }
+    };
   });
   if (scroll) scrollDown();
 }
