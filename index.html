@@ -709,11 +709,18 @@ function showChat(on) {
   const v = $('#chatView'); v.style.display = on ? 'flex' : 'none';
   $('#app').classList.toggle('show-chat', on);
 }
-$('#back').onclick = () => { activeId = null; showChat(false); render(); };
+$('#back').onclick = () => {
+  activeId = null;
+  currentOtherBan = null;
+  applyBanState(false);   // clear the “this person is banned” bar
+  showChat(false);
+  render();
+};
 
 async function openConv(id) {
   activeId = id; unread.delete(id);
   stopRec(true); clearPending(); clearReply(); closeMsgMenu();
+  currentOtherBan = null;          // reset until we know
   const c = getConv(id);
   if (!c) return;
   // refresh the other person's profile so last_seen is up to date
@@ -728,6 +735,11 @@ async function openConv(id) {
       }
     } catch (_) {}
   }
+  // Check whether the other person in a DM is banned (so we can block messaging them)
+  if (otherId && !c.is_group) {
+    currentOtherBan = await getUserBan(otherId);
+  }
+  applyBanState(false);            // update composer lock + ban bar for own/other ban
   $('#chTitle').textContent = convTitle(c);
   $('#chSub').textContent = convSub(c);
   setAv($('#chAv'), convAvatar(c), convTitle(c));
@@ -830,7 +842,9 @@ function clearPending() { pending.forEach(p => URL.revokeObjectURL(p.url)); pend
 function renderPending() {
   const el = $('#pending');
   el.classList.toggle('hidden', !pending.length);
-  $('#text').placeholder = banActive() ? 'You are banned from sending messages' : pending.length ? 'Add a message (optional)…' : 'Type a message…';
+  $('#text').placeholder = (banActive() || otherBanActive())
+    ? (banActive() ? 'You are banned from sending messages' : 'This person is banned — you can’t message them')
+    : pending.length ? 'Add a message (optional)…' : 'Type a message…';
   el.innerHTML = '';
   pending.forEach(p => {
     const t = p.file.type || '';
@@ -890,7 +904,7 @@ async function sendText() {
       }
       st.classList.add('hidden');
     }
-  } finally { sending = false; $('#send').disabled = banActive(); checkLimit(); }
+  } finally { sending = false; $('#send').disabled = banActive() || otherBanActive(); checkLimit(); }
   bumpConv(cid);
 }
 $('#send').onclick = sendText;
@@ -1259,6 +1273,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rese
    The database enforces it; this code just shows the screens.
    ================================================================ */
 let isAdmin = false, myBan = null, banTick = null, banPoll = null, banCh = null, banShownFor = '';
+let currentOtherBan = null;          // ban info of the other person in the open DM (null for groups / no ban)
+let otherBanCache = {};              // uid -> { ban, fetchedAt }
 const BAN_LOCKED = ['#text', '#send', '#attach', '#mic', '#ccText', '#ccSend'];
 
 function fmtLeft(ms) {
@@ -1275,6 +1291,40 @@ const banLeftMs = () => !myBan ? 0 : myBan.permanent ? Infinity : myBan.endsAt -
 const banActive = () => banLeftMs() > 0;
 const banLeftText = () => myBan?.permanent ? 'Permanent' : fmtLeft(banLeftMs());
 
+const otherBanLeftMs = () => !currentOtherBan ? 0 : currentOtherBan.permanent ? Infinity : currentOtherBan.endsAt - Date.now();
+const otherBanActive = () => otherBanLeftMs() > 0;
+const otherBanLeftText = () => currentOtherBan?.permanent ? 'the ban is lifted by an admin' : fmtLeft(otherBanLeftMs());
+
+/** Fetch ban status for any user. Requires the get_user_ban RPC (see SQL below). */
+async function getUserBan(uid) {
+  if (!uid || uid === me?.id) return null;
+  const cached = otherBanCache[uid];
+  if (cached && Date.now() - cached.fetchedAt < 30000) return cached.ban;
+  try {
+    const { data, error } = await sb.rpc('get_user_ban', { p_user: uid });
+    if (error) {
+      // RPC missing or RLS issue — fail soft so chat still works
+      if (!getUserBan._warned) {
+        getUserBan._warned = true;
+        console.warn('[Chatterbox] get_user_ban failed. Run the get_user_ban SQL in Supabase:', error.message);
+      }
+      return null;
+    }
+    const r = Array.isArray(data) ? data[0] : data;
+    const ban = r ? {
+      reason: r.ban_reason || r.reason || '',
+      permanent: !!r.permanent,
+      endsAt: Date.now() + (Number(r.seconds_left) || 0) * 1000,
+      id: String(r.ban_id || '')
+    } : null;
+    otherBanCache[uid] = { ban, fetchedAt: Date.now() };
+    return ban;
+  } catch (e) {
+    console.warn('[Chatterbox] getUserBan error', e);
+    return null;
+  }
+}
+
 async function loadMyBan(notify) {
   if (!me) return;
   const uid = me.id;
@@ -1286,38 +1336,60 @@ async function loadMyBan(notify) {
 }
 
 function applyBanState(notify) {
-  const on = banActive(), was = document.body.classList.contains('banned');
-  document.body.classList.toggle('banned', on);
-  BAN_LOCKED.forEach(sel => { const el = $(sel); if (el) el.disabled = on || (sel === '#send' && sending); });
-  $('#composer').classList.toggle('locked', on);
-  if (on) {
+  const ownOn = banActive(), was = document.body.classList.contains('banned');
+  const otherOn = otherBanActive();
+  const lock = ownOn || otherOn;
+  document.body.classList.toggle('banned', ownOn);
+  BAN_LOCKED.forEach(sel => { const el = $(sel); if (el) el.disabled = lock || (sel === '#send' && sending); });
+  $('#composer').classList.toggle('locked', lock);
+  if (ownOn) {
     $('#text').placeholder = 'You are banned from sending messages';
     $('#ccText').placeholder = 'You are banned';
+  } else if (otherOn) {
+    $('#text').placeholder = 'This person is banned — you can’t message them';
+    $('#ccText').placeholder = 'This person is banned';
   } else {
     $('#text').placeholder = pending.length ? 'Add a message (optional)…' : 'Type a message…';
     $('#ccText').placeholder = 'Message…';
   }
   const bar = $('#banBar');
-  if (on) {
+  if (ownOn) {
     bar.className = '';
     bar.innerHTML = '🚫 <b>You are banned from sending messages.</b> ' + (myBan.permanent ? '' : '<span id="banLeft"></span> left. ') + (myBan.reason ? '<br>Reason: ' + esc(myBan.reason) : '');
     tickBan();
     if (!banTick) banTick = setInterval(tickBan, 1000);
     if (notify && banShownFor !== myBan.id) { banShownFor = myBan.id; showBanOverlay(); }
+  } else if (otherOn) {
+    bar.className = '';
+    bar.innerHTML = '🚫 <b>This person has been banned so you can no longer message them until ' +
+      (currentOtherBan.permanent ? 'the ban is lifted by an admin' : '<span id="banLeft"></span>') +
+      '.</b>' + (currentOtherBan.reason ? '<br>Reason: ' + esc(currentOtherBan.reason) : '');
+    tickBan();
+    if (!banTick) banTick = setInterval(tickBan, 1000);
   } else {
     if (banTick) { clearInterval(banTick); banTick = null; }
     if (was) {                                           // the ban just ended (or the admin lifted it)
       bar.className = 'ok'; bar.textContent = '✅ Your ban is over. You can send messages again.';
-      setTimeout(() => { if (!banActive()) bar.className = 'hidden'; }, 6000);
+      setTimeout(() => { if (!banActive() && !otherBanActive()) bar.className = 'hidden'; }, 6000);
       if (!$('#banOverlay').classList.contains('hidden')) paintBanOverlay();
-    } else bar.className = 'hidden';
+    } else {
+      bar.className = 'hidden';
+    }
   }
 }
 
 function tickBan() {
-  if (!banActive()) return applyBanState(false);
-  const a = document.getElementById('banLeft'); if (a) a.textContent = banLeftText();
-  const b = document.getElementById('banTl'); if (b) b.textContent = banLeftText();
+  if (banActive()) {
+    const a = document.getElementById('banLeft'); if (a) a.textContent = banLeftText();
+    const b = document.getElementById('banTl'); if (b) b.textContent = banLeftText();
+    return;
+  }
+  if (otherBanActive()) {
+    const a = document.getElementById('banLeft'); if (a) a.textContent = otherBanLeftText();
+    return;
+  }
+  // neither ban is active any more
+  applyBanState(false);
 }
 
 function showBanOverlay() { $('#banOverlay').classList.remove('hidden'); paintBanOverlay(); }
@@ -1336,9 +1408,16 @@ function paintBanOverlay() {
 }
 
 function banGuard() {                                    // true = blocked
-  if (!banActive()) return false;
-  if ($('#banOverlay').classList.contains('hidden')) showBanOverlay();
-  return true;
+  if (banActive()) {
+    if ($('#banOverlay').classList.contains('hidden')) showBanOverlay();
+    return true;
+  }
+  if (otherBanActive()) {
+    // make sure the bar is visible and up to date
+    applyBanState(false);
+    return true;
+  }
+  return false;
 }
 
 function sendErr(error) {
@@ -1355,11 +1434,34 @@ async function startBans() {
     $('#adminBtn').classList.toggle('hidden', !isAdmin);
   });
   banCh = sb.channel('bans-' + uid)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'bans' }, p => {
-      if ((p.new || {}).user_id === uid) loadMyBan(true);
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bans' }, async p => {
+      const target = (p.new || p.old || {}).user_id;
+      if (target === uid) loadMyBan(true);
+      // If the person we're chatting with was banned / unbanned, refresh the bar
+      if (activeId && target) {
+        const c = getConv(activeId);
+        const otherId = c && !c.is_group ? dmOther(c) : null;
+        if (otherId === target) {
+          delete otherBanCache[target];
+          currentOtherBan = await getUserBan(otherId);
+          applyBanState(false);
+        }
+      }
     })
     .subscribe();
-  banPoll = setInterval(() => loadMyBan(true), 20000);   // backup in case a live update is missed
+  banPoll = setInterval(async () => {
+    loadMyBan(true);
+    // also refresh the open DM's ban status every 20s
+    if (activeId) {
+      const c = getConv(activeId);
+      const otherId = c && !c.is_group ? dmOther(c) : null;
+      if (otherId) {
+        delete otherBanCache[otherId];
+        currentOtherBan = await getUserBan(otherId);
+        applyBanState(false);
+      }
+    }
+  }, 20000);
   await loadMyBan(true);
 }
 
@@ -1368,6 +1470,7 @@ function stopBans() {
   clearInterval(banPoll); banPoll = null;
   clearInterval(banTick); banTick = null;
   myBan = null; isAdmin = false; banShownFor = '';
+  currentOtherBan = null; otherBanCache = {};
   document.body.classList.remove('banned');
   $('#adminBtn').classList.add('hidden');
   $('#banBar').className = 'hidden'; $('#banOverlay').classList.add('hidden');
