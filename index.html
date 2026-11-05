@@ -1293,7 +1293,24 @@ const banLeftText = () => myBan?.permanent ? 'Permanent' : fmtLeft(banLeftMs());
 
 const otherBanLeftMs = () => !currentOtherBan ? 0 : currentOtherBan.permanent ? Infinity : currentOtherBan.endsAt - Date.now();
 const otherBanActive = () => otherBanLeftMs() > 0;
-const otherBanLeftText = () => currentOtherBan?.permanent ? 'the ban is lifted by an admin' : fmtLeft(otherBanLeftMs());
+/** Exact Melbourne time when the other person's ban ends (or permanent text). */
+function otherBanEndText() {
+  if (!currentOtherBan) return '';
+  if (currentOtherBan.permanent) return 'the ban is lifted by an admin';
+  try {
+    return new Date(currentOtherBan.endsAt).toLocaleString('en-AU', {
+      timeZone: 'Australia/Melbourne',
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    }) + ' Melbourne time';
+  } catch {
+    return fmtLeft(otherBanLeftMs());
+  }
+}
 
 /** Fetch ban status for any user. Requires the get_user_ban RPC (see SQL below). */
 async function getUserBan(uid) {
@@ -1361,10 +1378,9 @@ function applyBanState(notify) {
     if (notify && banShownFor !== myBan.id) { banShownFor = myBan.id; showBanOverlay(); }
   } else if (otherOn) {
     bar.className = '';
+    // Reason is only shown to the banned person themselves (own ban UI). Never show it to others.
     bar.innerHTML = '🚫 <b>This person has been banned so you can no longer message them until ' +
-      (currentOtherBan.permanent ? 'the ban is lifted by an admin' : '<span id="banLeft"></span>') +
-      '.</b>' + (currentOtherBan.reason ? '<br>Reason: ' + esc(currentOtherBan.reason) : '');
-    tickBan();
+      esc(otherBanEndText()) + '.</b>';
     if (!banTick) banTick = setInterval(tickBan, 1000);
   } else {
     if (banTick) { clearInterval(banTick); banTick = null; }
@@ -1385,7 +1401,7 @@ function tickBan() {
     return;
   }
   if (otherBanActive()) {
-    const a = document.getElementById('banLeft'); if (a) a.textContent = otherBanLeftText();
+    // absolute Melbourne time is static; just wait until the ban expires then refresh
     return;
   }
   // neither ban is active any more
