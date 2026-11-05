@@ -229,6 +229,21 @@ input[type=number]:focus{border-color:var(--accent)}
 #replyBar .x{background:none;border:0;font-size:22px;line-height:1;color:var(--muted);padding:0 4px}
 
 /* modal */
+#modView{position:fixed;inset:0;z-index:19;background:var(--bg);display:flex;flex-direction:column}
+#modView.hidden{display:none}
+#modView .mvHead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+#modView .mvHead b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#modView .mvBody{flex:1;overflow-y:auto;padding:12px 14px;max-width:760px;width:100%;margin:0 auto}
+#modView .mvNote{color:var(--muted);font-size:13px;margin-bottom:10px}
+#modView .mvRow{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel);cursor:pointer}
+#modView .mvRow:hover{border-color:var(--accent)}
+#modView .mvRow .nm{font-weight:600}
+#modView .mvRow small{color:var(--muted)}
+#modView .mvMsg{padding:8px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel)}
+#modView .mvMsg .who{font-size:12px;color:var(--muted);margin-bottom:3px;display:flex;gap:8px;align-items:center}
+#modView .mvMsg .who span{flex:1}
+#modView .mvMsg img{max-width:100%;max-height:260px;border-radius:8px;display:block;margin-top:6px}
+#modView .mvMsg .tx{white-space:pre-wrap;word-break:break-word}
 #modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
 #modal{background:var(--panel);border-radius:14px;padding:20px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;border:1px solid var(--line)}
 #modal h3{margin:0 0 12px}
@@ -1518,7 +1533,7 @@ function stopBans() {
   if (banCh) { sb.removeChannel(banCh); banCh = null; }
   clearInterval(banPoll); banPoll = null;
   clearInterval(banTick); banTick = null;
-  myBan = null; isAdmin = false; banShownFor = '';
+  myBan = null; isAdmin = false; banShownFor = ''; closeModView();
   currentOtherBan = null; otherBanCache = {};
   document.body.classList.remove('banned');
   $('#adminBtn').classList.add('hidden');
@@ -1557,15 +1572,110 @@ function paintAdminRows() {
   }).join('') : '<div class="empty">No one found.</div>';
 }
 
+/* ---- Admin: browse every GROUP chat (even ones you're not in) and delete messages ----
+   Text only until you press Preview, so looking around doesn't use bandwidth. DMs are never shown. */
+let mvGroup = null;
+function mvShell() {
+  let v = $('#modView');
+  if (!v) { v = document.createElement('div'); v.id = 'modView'; document.body.appendChild(v); }
+  v.classList.remove('hidden');
+  return v;
+}
+function closeModView() { const v = $('#modView'); if (v) v.classList.add('hidden'); mvGroup = null; }
+async function openModView() {
+  if (!isAdmin) return;
+  mvGroup = null;
+  const v = mvShell();
+  v.innerHTML = `<div class="mvHead"><button class="btn ghost small" id="mvClose">✕ Close</button><b>👁️ All group chats</b></div>
+    <div class="mvBody"><div class="mvNote">Biggest files first. Group chats only — private 1-to-1 chats can’t be opened. Members are not told you looked.</div><div id="mvList"><div class="empty">Loading…</div></div></div>`;
+  $('#mvClose').onclick = closeModView;
+  const { data, error } = await sb.rpc('admin_list_groups');
+  if (!$('#mvList')) return;
+  if (error) { $('#mvList').innerHTML = `<div class="err">${esc(error.message)}${/function|schema cache/i.test(error.message) ? ' (Did you run admin-groups.sql in Supabase?)' : ''}</div>`; return; }
+  $('#mvList').innerHTML = (data || []).length ? data.map(g => `<div class="mvRow" data-g="${esc(g.group_id)}" data-n="${esc(g.group_name || 'Group')}">
+      <div style="flex:1;min-width:0"><div class="nm">${esc(g.group_name || 'Group')}${g.is_member ? ' <small>(you’re in it)</small>' : ''}</div>
+      <small>${g.member_count} members · ${g.message_count} messages · ${g.file_count} files (${fmtSize(Number(g.file_bytes) || 0)})</small></div><span>›</span></div>`).join('')
+    : '<div class="empty">No group chats yet.</div>';
+  $('#mvList').onclick = e => { const r = e.target.closest('.mvRow'); if (r) openModGroup(r.dataset.g, r.dataset.n); };
+}
+function mvMsgHtml(m) {
+  const who = (profiles[m.sender_id]?.display_name) || 'Someone';
+  const file = m.file_path ? `<div style="margin-top:4px">📎 ${esc(m.file_name || 'file')} <small style="color:var(--muted)">${fmtSize(m.file_size || 0)}</small>
+      <button class="btn ghost small" data-prev="${esc(m.file_path)}" data-type="${esc(m.file_type || '')}" data-name="${esc(m.file_name || '')}">Preview</button></div><div class="mvPrev"></div>` : '';
+  return `<div class="mvMsg" data-m="${esc(m.id)}" data-fp="${esc(m.file_path || '')}">
+    <div class="who"><span>${esc(who)} · ${esc(fmtDay(m.created_at))} ${esc(fmtTime(m.created_at))}</span><button class="btn danger small" data-del="${esc(m.id)}">🗑️ Delete</button></div>
+    ${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}${file}</div>`;
+}
+async function openModGroup(id, name) {
+  mvGroup = { id, name, oldest: null, done: false, busy: false };
+  const v = mvShell();
+  v.innerHTML = `<div class="mvHead"><button class="btn ghost small" id="mvBack">‹ Back</button><b>${esc(name)}</b><button class="btn ghost small" id="mvClose">✕</button></div>
+    <div class="mvBody"><div class="err" id="mvErr"></div><div id="mvMsgs"><div class="empty">Loading…</div></div><button class="btn ghost small hidden" id="mvMore" style="margin:6px 0 14px">Load older</button></div>`;
+  $('#mvClose').onclick = closeModView;
+  $('#mvBack').onclick = openModView;
+  $('#mvMore').onclick = () => loadModMsgs(false);
+  $('#mvMsgs').onclick = onModClick;
+  await loadModMsgs(true);
+}
+async function loadModMsgs(first) {
+  const g = mvGroup; if (!g || g.busy) return; g.busy = true;
+  const { data, error } = await sb.rpc('admin_group_messages', { p_conv: g.id, p_limit: 100, p_before: g.oldest });
+  g.busy = false;
+  if (mvGroup !== g || !$('#mvMsgs')) return;
+  if (error) { $('#mvErr').textContent = error.message; if (first) $('#mvMsgs').innerHTML = ''; return; }
+  const rows = data || [];
+  if (rows.length) g.oldest = rows[rows.length - 1].created_at;
+  g.done = rows.length < 100;
+  const need = [...new Set(rows.map(m => m.sender_id))].filter(u => !profiles[u]);
+  for (const u of need) { try { await nameOf(u); } catch (_) {} }
+  if (first) $('#mvMsgs').innerHTML = '';
+  if (first && !rows.length) $('#mvMsgs').innerHTML = '<div class="empty">No messages.</div>';
+  $('#mvMsgs').insertAdjacentHTML('beforeend', rows.map(mvMsgHtml).join(''));   // newest first
+  $('#mvMore').classList.toggle('hidden', g.done);
+}
+async function onModClick(e) {
+  const b = e.target.closest('button'); if (!b) return;
+  const box = b.closest('.mvMsg');
+  if (b.dataset.prev) {
+    b.disabled = true;
+    const { data } = await sb.storage.from(BUCKET).createSignedUrl(b.dataset.prev, 600);
+    b.disabled = false;
+    if (!data?.signedUrl) { $('#mvErr').textContent = 'Could not load that file. (Did you run admin-groups.sql in Supabase?)'; return; }
+    const holder = box.querySelector('.mvPrev');
+    if ((b.dataset.type || '').startsWith('image/')) holder.innerHTML = `<img src="${esc(data.signedUrl)}" alt="">`;
+    else if ((b.dataset.type || '').startsWith('audio/')) holder.innerHTML = `<audio controls preload="none" src="${esc(data.signedUrl)}" style="width:100%"></audio>`;
+    else holder.innerHTML = `<a href="${esc(data.signedUrl)}" target="_blank" rel="noopener">Open file</a>`;
+    return;
+  }
+  if (b.dataset.del) {
+    if (!confirm('Delete this message for everyone? This can’t be undone.')) return;
+    b.disabled = true;
+    const fp = box.dataset.fp;
+    const { error } = await sb.rpc('admin_delete_messages', { p_ids: [b.dataset.del] });
+    if (error) { $('#mvErr').textContent = error.message; b.disabled = false; return; }
+    $('#mvErr').textContent = '';
+    if (fp) {                                   // also free the storage space
+      try {
+        const { data: rm, error: re } = await sb.storage.from(BUCKET).remove([fp]);
+        if (re || !rm || !rm.length) $('#mvErr').textContent = 'Message deleted, but its file could not be removed from storage. (Did you run admin-groups.sql?)';
+      } catch (_) {}
+    }
+    document.querySelectorAll(`[data-mid="${b.dataset.del}"]`).forEach(el => el.remove());   // if it was open in your own chat list
+    box.remove();
+  }
+}
+
 async function openAdmin() {
   if (!isAdmin) return;
   openModal(`<h3>🛡️ Admin: bans</h3>
     <div style="color:var(--muted);font-size:13px;margin-bottom:10px">Banned people can still read their chats, but can’t send messages or react. Only this account can ban or unban.</div>
+    <button class="btn ghost small" id="admGroups" style="margin-bottom:10px">👁️ View all group chats</button>
     <input type="text" id="admQ" placeholder="Search people…">
     <div class="err" id="admErr"></div>
     <div id="admList"><div class="empty">Loading…</div></div>
     <div class="actions"><button class="btn ghost" id="admClose">Close</button></div>`);
   $('#admClose').onclick = closeModal;
+  $('#admGroups').onclick = () => { closeModal(); openModView(); };
   $('#admQ').oninput = paintAdminRows;
   $('#admList').onclick = async e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1872,6 +1982,10 @@ $('#meAv').onclick = () => {
       <div class="av" id="pfAv" style="width:72px;height:72px;font-size:30px"></div>
       <button class="btn ghost" id="pfPic">Change picture</button>
     </div>
+    <label id="kingRow" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:14px;cursor:pointer">
+      <input type="checkbox" id="pfKing" ${kingOn() ? 'checked' : ''} style="width:auto;margin:0">
+      <span><b>King Mode 👑</b><br><small style="color:var(--muted)">When you leave a call, your send-off song plays for everyone else in it. Off by default, and only affects your own exits.</small></span>
+    </label>
     <div style="color:var(--muted);font-size:13px;margin-bottom:4px">Display name</div>
     <input type="text" id="pfName" maxlength="40" value="${esc(myProfile.display_name)}">
     <div style="color:var(--muted);font-size:13px;margin-top:8px">Username: @${esc(myProfile.username)}</div>
@@ -1879,6 +1993,7 @@ $('#meAv').onclick = () => {
     <div class="actions"><button class="btn ghost" id="pfClose">Close</button><button class="btn" id="pfSave">Save name</button></div>`);
   setAv($('#pfAv'), myProfile.avatar_url, myProfile.display_name);
   $('#pfClose').onclick = closeModal;
+  $('#pfKing').onchange = e => setKing(e.target.checked);
   $('#pfCode').onclick = () => showRecoveryCode(false);
   $('#pfPass').onclick = openChangePassword;
   $('#pfPic').onclick = () => openAvatarPicker({
@@ -2543,7 +2658,11 @@ function onPeerOutro(uid) {                // somebody else pressed End call
   clearTimeout(c.outroHide);
   c.outroHide = setTimeout(() => { if (call === c && !c.leaving) bar.classList.add('hidden'); }, OUTRO_MS);
 }
-$('#cEnd').onclick = startLeaving;
+// King Mode: only people who switch it on play the send-off song when THEY leave.
+const kingKey = () => 'cb_king_' + (me ? me.id : '');
+function kingOn() { try { return localStorage.getItem(kingKey()) === '1'; } catch (_) { return false; } }
+function setKing(on) { try { localStorage.setItem(kingKey(), on ? '1' : '0'); } catch (_) {} }
+$('#cEnd').onclick = () => { if (kingOn()) startLeaving(); else hangUp(); };
 
 /* ---- in-call chat (same chat as the conversation you're calling in) ---- */
 let ccUnread = 0, ccDrag = null;
