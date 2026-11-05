@@ -242,6 +242,11 @@ input[type=number]:focus{border-color:var(--accent)}
 #modView .mvMsg{padding:8px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel)}
 #modView .mvMsg .who{font-size:12px;color:var(--muted);margin-bottom:3px;display:flex;gap:8px;align-items:center}
 #modView .mvMsg .who span{flex:1}
+#modView .tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+#modView .tabs button{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 14px;font-size:14px;color:inherit;cursor:pointer}
+#modView .tabs button.on{border-color:var(--accent);background:var(--accent);color:#fff}
+#modView .mvMem{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:8px 12px;margin-bottom:10px}
+#modView .mvMem div{padding:3px 0}
 #modView .mvMsg img{max-width:100%;max-height:260px;border-radius:8px;display:block;margin-top:6px}
 #modView .mvMsg .tx{white-space:pre-wrap;word-break:break-word}
 #modalWrap{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20}
@@ -1601,25 +1606,70 @@ async function openModView() {
 function mvMsgHtml(m) {
   const who = (profiles[m.sender_id]?.display_name) || 'Someone';
   const file = m.file_path ? `<div style="margin-top:4px">📎 ${esc(m.file_name || 'file')} <small style="color:var(--muted)">${fmtSize(m.file_size || 0)}</small>
-      <button class="btn ghost small" data-prev="${esc(m.file_path)}" data-type="${esc(m.file_type || '')}" data-name="${esc(m.file_name || '')}">Preview</button></div><div class="mvPrev"></div>` : '';
+      <button class="btn ghost small" data-prev="${esc(m.file_path)}" data-type="${esc(m.file_type || '')}" data-name="${esc(m.file_name || '')}">${(m.file_type || '').startsWith('audio/') ? '▶ Play' : 'Preview'}</button></div><div class="mvPrev"></div>` : '';
   return `<div class="mvMsg" data-m="${esc(m.id)}" data-fp="${esc(m.file_path || '')}">
     <div class="who"><span>${esc(who)} · ${esc(fmtDay(m.created_at))} ${esc(fmtTime(m.created_at))}</span><button class="btn danger small" data-del="${esc(m.id)}">🗑️ Delete</button></div>
     ${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}${file}</div>`;
 }
 async function openModGroup(id, name) {
-  mvGroup = { id, name, oldest: null, done: false, busy: false };
+  mvGroup = { id, name, kind: 'all', oldest: null, done: false, busy: false };
   const v = mvShell();
-  v.innerHTML = `<div class="mvHead"><button class="btn ghost small" id="mvBack">‹ Back</button><b>${esc(name)}</b><button class="btn ghost small" id="mvClose">✕</button></div>
-    <div class="mvBody"><div class="err" id="mvErr"></div><div id="mvMsgs"><div class="empty">Loading…</div></div><button class="btn ghost small hidden" id="mvMore" style="margin:6px 0 14px">Load older</button></div>`;
+  v.innerHTML = `<div class="mvHead"><button class="btn ghost small" id="mvBack">‹ Back</button><b>${esc(name)}</b><button class="btn ghost small" id="mvMembers">👥 Members</button><button class="btn danger small" id="mvDelGroup">🗑️ Delete group</button><button class="btn ghost small" id="mvClose">✕</button></div>
+    <div class="mvBody"><div class="mvMem hidden" id="mvMem"></div>
+    <div class="tabs" id="mvTabs"><button data-k="all" class="on">All</button><button data-k="files">📎 Files</button><button data-k="voice">🎤 Voice</button></div>
+    <div class="err" id="mvErr"></div><div id="mvMsgs"><div class="empty">Loading…</div></div><button class="btn ghost small hidden" id="mvMore" style="margin:6px 0 14px">Load older</button></div>`;
   $('#mvClose').onclick = closeModView;
   $('#mvBack').onclick = openModView;
   $('#mvMore').onclick = () => loadModMsgs(false);
+  $('#mvTabs').onclick = e => {
+    const b = e.target.closest('button'); if (!b || !mvGroup) return;
+    document.querySelectorAll('#mvTabs button').forEach(x => x.classList.toggle('on', x === b));
+    mvGroup.kind = b.dataset.k; mvGroup.oldest = null; mvGroup.done = false;
+    $('#mvErr').textContent = ''; $('#mvMsgs').innerHTML = '<div class="empty">Loading…</div>'; $('#mvMore').classList.add('hidden');
+    loadModMsgs(true);
+  };
+  $('#mvDelGroup').onclick = async () => {
+    const g = mvGroup; if (!g) return;
+    const typed = prompt('Delete the whole group “' + g.name + '”?\n\nThis permanently deletes the group, ALL its messages and files, for everyone. It can’t be undone.\n\nType the group name to confirm:');
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== (g.name || '').trim().toLowerCase()) { $('#mvErr').textContent = 'That didn’t match the group name, so nothing was deleted.'; return; }
+    const btn = $('#mvDelGroup'); btn.disabled = true; btn.textContent = 'Deleting…';
+    // collect the chat's files first (they live in a folder named after the chat), then delete the chat
+    let paths = [];
+    try {
+      for (let off = 0; off < 5000; off += 1000) {
+        const { data } = await sb.storage.from(BUCKET).list(g.id, { limit: 1000, offset: off });
+        if (!data || !data.length) break;
+        paths.push(...data.map(f => g.id + '/' + f.name));
+        if (data.length < 1000) break;
+      }
+    } catch (_) {}
+    const { error } = await sb.rpc('admin_delete_group', { p_conv: g.id });
+    if (error) { $('#mvErr').textContent = error.message + (/function|schema cache/i.test(error.message) ? ' (Run the new admin-groups.sql in Supabase.)' : ''); btn.disabled = false; btn.textContent = '🗑️ Delete group'; return; }
+    let left = 0;
+    for (let i = 0; i < paths.length; i += 100) {
+      try { const { data } = await sb.storage.from(BUCKET).remove(paths.slice(i, i + 100)); left += paths.slice(i, i + 100).length - (data ? data.length : 0); } catch (_) { left += paths.slice(i, i + 100).length; }
+    }
+    try { await loadConvs(); render(); } catch (_) {}
+    await openModView();
+    if (left) $('#mvList').insertAdjacentHTML('afterbegin', `<div class="err">Group deleted, but ${left} file(s) could not be removed from storage.</div>`);
+  };
+  $('#mvMembers').onclick = async () => {
+    const box = $('#mvMem');
+    if (!box.classList.contains('hidden')) return box.classList.add('hidden');
+    box.classList.remove('hidden'); box.innerHTML = 'Loading…';
+    const g = mvGroup;
+    const { data, error } = await sb.rpc('admin_group_members', { p_conv: g.id });
+    if (mvGroup !== g || !$('#mvMem')) return;
+    if (error) { box.innerHTML = `<div class="err">${esc(error.message)}${/function|schema cache/i.test(error.message) ? ' (Run the new admin-groups.sql in Supabase.)' : ''}</div>`; return; }
+    box.innerHTML = `<b>${(data || []).length} members</b>` + (data || []).map(u => `<div>${esc(u.display_name || u.username)} <small style="color:var(--muted)">@${esc(u.username)}</small></div>`).join('');
+  };
   $('#mvMsgs').onclick = onModClick;
   await loadModMsgs(true);
 }
 async function loadModMsgs(first) {
   const g = mvGroup; if (!g || g.busy) return; g.busy = true;
-  const { data, error } = await sb.rpc('admin_group_messages', { p_conv: g.id, p_limit: 100, p_before: g.oldest });
+  const { data, error } = await sb.rpc('admin_group_messages', { p_conv: g.id, p_limit: 100, p_before: g.oldest, p_kind: g.kind });
   g.busy = false;
   if (mvGroup !== g || !$('#mvMsgs')) return;
   if (error) { $('#mvErr').textContent = error.message; if (first) $('#mvMsgs').innerHTML = ''; return; }
@@ -1629,7 +1679,7 @@ async function loadModMsgs(first) {
   const need = [...new Set(rows.map(m => m.sender_id))].filter(u => !profiles[u]);
   for (const u of need) { try { await nameOf(u); } catch (_) {} }
   if (first) $('#mvMsgs').innerHTML = '';
-  if (first && !rows.length) $('#mvMsgs').innerHTML = '<div class="empty">No messages.</div>';
+  if (first && !rows.length) $('#mvMsgs').innerHTML = `<div class="empty">${g.kind === 'files' ? 'No files in this chat.' : g.kind === 'voice' ? 'No voice messages in this chat.' : 'No messages.'}</div>`;
   $('#mvMsgs').insertAdjacentHTML('beforeend', rows.map(mvMsgHtml).join(''));   // newest first
   $('#mvMore').classList.toggle('hidden', g.done);
 }
@@ -1643,7 +1693,7 @@ async function onModClick(e) {
     if (!data?.signedUrl) { $('#mvErr').textContent = 'Could not load that file. (Did you run admin-groups.sql in Supabase?)'; return; }
     const holder = box.querySelector('.mvPrev');
     if ((b.dataset.type || '').startsWith('image/')) holder.innerHTML = `<img src="${esc(data.signedUrl)}" alt="">`;
-    else if ((b.dataset.type || '').startsWith('audio/')) holder.innerHTML = `<audio controls preload="none" src="${esc(data.signedUrl)}" style="width:100%"></audio>`;
+    else if ((b.dataset.type || '').startsWith('audio/')) { holder.innerHTML = `<audio controls preload="auto" src="${esc(data.signedUrl)}" style="width:100%;margin-top:6px"></audio>`; holder.firstChild.play().catch(() => {}); b.classList.add('hidden'); }
     else holder.innerHTML = `<a href="${esc(data.signedUrl)}" target="_blank" rel="noopener">Open file</a>`;
     return;
   }
