@@ -814,7 +814,7 @@ async function appendMsg(m, scroll = true) {
   const div = document.createElement('div');
   div.className = 'msg' + (mine ? ' me' : '');
   div.dataset.mid = m.id;
-  div.innerHTML = `${name}${quote}${file}${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}<div class="reacts hidden"></div><div class="tm">${fmtTime(m.created_at)}${delBtn}</div>`;
+  div.innerHTML = `${name}${quote}${file}${m.body ? `<div class="tx">${m.body}</div>` : ''}<div class="reacts hidden"></div><div class="tm">${fmtTime(m.created_at)}${delBtn}</div>`;
   box.appendChild(div);
   if (Array.isArray(m.message_reactions)) reacts[m.id] = m.message_reactions.map(r => ({ user_id: r.user_id, emoji: r.emoji }));
   else if (!reacts[m.id]) reacts[m.id] = [];
