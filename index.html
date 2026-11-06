@@ -825,11 +825,20 @@ async function appendMsg(m, scroll = true) {
   // Images + normal files: load signed URL now. Voice notes: only when the user presses Play.
   div.querySelectorAll('[data-path]').forEach(async el => {
     if (el.classList.contains('play-voice')) return;   // handled on click
+    if (el.tagName === 'IMG') {
+      el.style.minHeight = '120px'; el.style.minWidth = '160px'; el.style.background = 'var(--line)';   // holds the space until it loads
+      lazyLoad(el, async () => {
+        const url = await cachedFileUrl(el.dataset.path);
+        if (!url) return;
+        el.onload = () => { el.style.minHeight = el.style.minWidth = el.style.background = ''; if (scroll) scrollDown(); };
+        el.src = url; el.onclick = () => openLightbox(url, el.dataset.path, el.dataset.name);
+      });
+      return;
+    }
     const dl = el.dataset.dl ? { download: el.dataset.dl } : undefined;
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(el.dataset.path, 3600, dl);
     if (!data) return;
-    if (el.tagName === 'IMG') { el.src = data.signedUrl; el.onclick = () => openLightbox(data.signedUrl, el.dataset.path, el.dataset.name); el.onload = () => { if (scroll) scrollDown(); }; }
-    else el.href = data.signedUrl;
+    el.href = data.signedUrl;
   });
   div.querySelectorAll('.play-voice').forEach(btn => {
     btn.onclick = async (e) => {
@@ -839,12 +848,12 @@ async function appendMsg(m, scroll = true) {
       btn.disabled = true;
       btn.textContent = 'Loading…';
       try {
-        const { data } = await sb.storage.from(BUCKET).createSignedUrl(btn.dataset.path, 3600);
-        if (!data?.signedUrl) throw new Error('Could not load audio');
+        const vurl = await cachedFileUrl(btn.dataset.path);
+        if (!vurl) throw new Error('Could not load audio');
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.preload = 'auto';
-        audio.src = data.signedUrl;
+        audio.src = vurl;
         audio.style.width = '260px';
         audio.style.maxWidth = '100%';
         audio.style.display = 'block';
@@ -880,9 +889,70 @@ async function deleteOwnMessage(id, filePath) {
 let pending = [];   // staged files: { file, url }
 let sending = false;
 
-function addPending(file) {
+/* ---- Saving Supabase bandwidth (egress) ----
+   1) Pictures are shrunk on the sender's device before upload (a 4 MB photo becomes ~150 KB).
+   2) Every file a device downloads is kept in the browser's own storage, so it is downloaded once, ever.
+   3) Pictures only download when they scroll into view.
+   (A blob: link from createObjectURL only exists inside the sender's own browser tab, so other people
+   can't open it. That is why the shrunk file is still uploaded once and shared from the cache.) */
+const IMG_MAX_SIDE = 1280, IMG_QUALITY = 0.78, CACHE_NAME = 'chatterbox-files-v1', CACHE_MAX = 250;
+async function shrinkImage(file) {
+  try {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;          // gifs / svgs / others stay as they are
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, IMG_MAX_SIDE / Math.max(bmp.width, bmp.height));
+    if (scale === 1 && file.size < 250 * 1024) { bmp.close && bmp.close(); return file; }   // already small
+    const w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d');
+    if (file.type !== 'image/jpeg') { cx.fillStyle = '#fff'; cx.fillRect(0, 0, w, h); }   // jpeg has no see-through parts
+    cx.drawImage(bmp, 0, 0, w, h); bmp.close && bmp.close();
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', IMG_QUALITY));
+    if (!blob || blob.size >= file.size) return file;                      // never make it bigger
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (_) { return file; }
+}
+const fileUrlMem = new Map();
+const fileKey = path => new Request('https://chatterbox.local/f/' + encodeURIComponent(path));
+async function openFileCache() { try { return await caches.open(CACHE_NAME); } catch (_) { return null; } }
+async function trimFileCache(cache) {
+  try { const keys = await cache.keys(); for (let i = 0; i < keys.length - CACHE_MAX; i++) await cache.delete(keys[i]); } catch (_) {}
+}
+// Where to load a file from: this device's saved copy if there is one, otherwise download it ONCE and save it.
+function cachedFileUrl(path) {
+  if (fileUrlMem.has(path)) return fileUrlMem.get(path);
+  const p = (async () => {
+    const cache = await openFileCache();
+    try { if (cache) { const hit = await cache.match(fileKey(path)); if (hit) return URL.createObjectURL(await hit.blob()); } } catch (_) {}
+    const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
+    if (!data?.signedUrl) return null;
+    try {
+      const res = await fetch(data.signedUrl);
+      if (!res.ok) throw new Error('bad');
+      if (cache) { try { await cache.put(fileKey(path), res.clone()); trimFileCache(cache); } catch (_) {} }
+      return URL.createObjectURL(await res.blob());
+    } catch (_) { return data.signedUrl; }                                  // fall back to the normal link
+  })();
+  fileUrlMem.set(path, p);
+  p.then(u => { if (!u) fileUrlMem.delete(path); });
+  return p;
+}
+// The sender already has the file, so save it now and they never download their own upload.
+async function seedFileCache(path, file) {
+  try { const cache = await openFileCache(); if (cache) { await cache.put(fileKey(path), new Response(file, { headers: { 'Content-Type': file.type || 'application/octet-stream' } })); trimFileCache(cache); } } catch (_) {}
+}
+// Only start a download when the picture is about to be seen.
+const lazyImgs = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+  entries.forEach(en => { if (en.isIntersecting) { lazyImgs.unobserve(en.target); const f = en.target.__load; if (f) f(); } });
+}, { rootMargin: '300px' }) : null;
+function lazyLoad(el, load) { if (!lazyImgs) return load(); el.__load = load; lazyImgs.observe(el); }
+
+async function addPending(file) {
+  const orig = file.size;
+  if (orig > 50 * 1048576) return alert(`${file.name} is too big.`);
+  file = await shrinkImage(file);                         // big phone photos are fine: they shrink first, then the limit applies
   if (file.size > MAX_FILE_MB * 1048576) return alert(`${file.name} is over ${MAX_FILE_MB} MB.`);
-  pending.push({ file, url: URL.createObjectURL(file) });
+  pending.push({ file, url: URL.createObjectURL(file), orig });
   renderPending();
 }
 function removePending(item) {
@@ -905,7 +975,7 @@ function renderPending() {
     const preview = t.startsWith('image/') ? `<img src="${p.url}" alt="">`
       : t.startsWith('audio/') ? `<audio controls src="${p.url}"></audio>`
       : '<span style="font-size:24px">📎</span>';
-    const label = t.startsWith('audio/') ? '' : `<div class="nm2"><b>${esc(p.file.name)}</b><span style="color:var(--muted)">${fmtSize(p.file.size)}</span></div>`;
+    const label = t.startsWith('audio/') ? '' : `<div class="nm2"><b>${esc(p.file.name)}</b><span style="color:var(--muted)">${fmtSize(p.file.size)}${p.orig && p.orig > p.file.size * 1.2 ? ' (shrunk from ' + fmtSize(p.orig) + ')' : ''}</span></div>`;
     chip.innerHTML = `${preview}${label}<button class="x" title="Remove">×</button>`;
     chip.querySelector('.x').onclick = () => removePending(p);
     el.appendChild(chip);
@@ -944,6 +1014,7 @@ async function sendText() {
         const path = `${cid}/${crypto.randomUUID()}-${safe}`;
         const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
         if (up.error) { alert('Upload failed: ' + up.error.message); break; }
+        seedFileCache(path, f);
         const { data, error } = await sb.from('messages').insert({
           conversation_id: cid, sender_id: me.id, body: caption,
           file_path: path, file_name: f.name, file_type: f.type, file_size: f.size,
@@ -1000,7 +1071,7 @@ $('#mic').onclick = async () => {
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch { return alert('Microphone access was blocked. Allow it in your browser (the icon next to the address bar) and try again.'); }
   const mime = pickMime();
-  const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  const r = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
   rec = r; recChunks = []; recCancel = false;
   r.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
   r.onstop = () => {
@@ -1031,8 +1102,9 @@ function openLightbox(src, path, name) {
   $('#lbName').textContent = name || '';
   const dl = $('#lbDl'); dl.href = src; dl.setAttribute('download', name || 'image');
   $('#lightbox').classList.remove('hidden');
-  sb.storage.from(BUCKET).createSignedUrl(path, 3600, { download: name || true })
-    .then(({ data }) => { if (data) dl.href = data.signedUrl; });
+  if (!String(src).startsWith('blob:'))
+    sb.storage.from(BUCKET).createSignedUrl(path, 3600, { download: name || true })
+      .then(({ data }) => { if (data) dl.href = data.signedUrl; });
 }
 function closeLightbox() { $('#lightbox').classList.add('hidden'); $('#lbImg').removeAttribute('src'); }
 $('#lbClose').onclick = closeLightbox;
