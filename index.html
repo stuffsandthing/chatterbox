@@ -566,6 +566,7 @@ async function startApp(user) {
   subscribe();
   startPresence();
   startSignals();
+  startP2P();
   startBans();
   if (soundOn && !ac) $('#soundHint').classList.remove('hidden');
   if (showCodeAfterStart) { showCodeAfterStart = false; showRecoveryCode(true); }
@@ -827,12 +828,34 @@ async function appendMsg(m, scroll = true) {
     if (el.classList.contains('play-voice')) return;   // handled on click
     if (el.tagName === 'IMG') {
       el.style.minHeight = '120px'; el.style.minWidth = '160px'; el.style.background = 'var(--line)';   // holds the space until it loads
-      lazyLoad(el, async () => {
-        const url = await cachedFileUrl(el.dataset.path);
-        if (!url) return;
+      const path = el.dataset.path, p2p = isP2P(path);
+      const run = async () => {
+        if (p2p) p2pNote(el, '📡 Getting this picture from ' + (mine ? 'another member' : nameFor(m.sender_id)) + '…');
+        const url = await cachedFileUrl(path, m.sender_id);
+        if (!url) {
+          if (!document.contains(el)) return;
+          p2pNote(el, mine ? 'Not on this device any more.' : 'Not available right now. It loads by itself when ' + nameFor(m.sender_id) + ' (or someone who has it) is online.', run);
+          if (!mine) p2pWaiters.push({ path, senderId: m.sender_id, run });
+          return;
+        }
+        if (p2p) p2pNote(el, '');
         el.onload = () => { el.style.minHeight = el.style.minWidth = el.style.background = ''; if (scroll) scrollDown(); };
-        el.src = url; el.onclick = () => openLightbox(url, el.dataset.path, el.dataset.name);
-      });
+        el.src = url; el.onclick = () => openLightbox(url, path, el.dataset.name);
+      };
+      lazyLoad(el, run);
+      return;
+    }
+    if (isP2P(el.dataset.path)) {
+      el.onclick = async (e) => {
+        e.preventDefault();
+        if (el.dataset.busy) return; el.dataset.busy = '1';
+        p2pNote(el, '📡 Getting the file…');
+        const url = await cachedFileUrl(el.dataset.path, m.sender_id);
+        delete el.dataset.busy;
+        if (!url) return p2pNote(el, 'Not available right now. Try again when ' + nameFor(m.sender_id) + ' (or someone who has it) is online.');
+        p2pNote(el, '');
+        const a = document.createElement('a'); a.href = url; a.download = el.dataset.dl || 'file'; document.body.appendChild(a); a.click(); a.remove();
+      };
       return;
     }
     const dl = el.dataset.dl ? { download: el.dataset.dl } : undefined;
@@ -848,8 +871,8 @@ async function appendMsg(m, scroll = true) {
       btn.disabled = true;
       btn.textContent = 'Loading…';
       try {
-        const vurl = await cachedFileUrl(btn.dataset.path);
-        if (!vurl) throw new Error('Could not load audio');
+        const vurl = await cachedFileUrl(btn.dataset.path, m.sender_id);
+        if (!vurl) throw new Error(isP2P(btn.dataset.path) ? 'offline' : 'Could not load audio');
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.preload = 'auto';
@@ -865,7 +888,7 @@ async function appendMsg(m, scroll = true) {
         btn.disabled = false;
         btn.textContent = '🎤 Play voice message';
         delete btn.dataset.loading;
-        alert('Could not load the voice message.');
+        alert(isP2P(btn.dataset.path) ? nameFor(m.sender_id) + ' (or someone who has it) needs to be online to play this. Try again later.' : 'Could not load the voice message.');
       }
     };
   });
@@ -879,7 +902,8 @@ async function deleteOwnMessage(id, filePath) {
   // remove from UI immediately
   document.querySelectorAll(`[data-mid="${id}"]`).forEach(el => el.remove());
   // optionally remove the file from storage
-  if (filePath) {
+  if (filePath && isP2P(filePath)) { memFiles.delete(filePath); fileUrlMem.delete(filePath); FDB.del('mine', filePath); }
+  else if (filePath) {
     try { await sb.storage.from(BUCKET).remove([filePath]); } catch (_) {}
   }
   // also remove from in-call chat if present
@@ -889,13 +913,19 @@ async function deleteOwnMessage(id, filePath) {
 let pending = [];   // staged files: { file, url }
 let sending = false;
 
-/* ---- Saving Supabase bandwidth (egress) ----
-   1) Pictures are shrunk on the sender's device before upload (a 4 MB photo becomes ~150 KB).
-   2) Every file a device downloads is kept in the browser's own storage, so it is downloaded once, ever.
-   3) Pictures only download when they scroll into view.
-   (A blob: link from createObjectURL only exists inside the sender's own browser tab, so other people
-   can't open it. That is why the shrunk file is still uploaded once and shared from the cache.) */
-const IMG_MAX_SIDE = 1280, IMG_QUALITY = 0.78, CACHE_NAME = 'chatterbox-files-v1', CACHE_MAX = 250;
+/* ---- Sharing files WITHOUT Supabase storage (so no egress) ----
+   * Pictures are shrunk on the sender's device first.
+   * Nothing is uploaded. The file stays on the sender's device (saved in the browser, so it survives a refresh).
+   * When someone opens the chat, their browser asks the sender's browser for it directly (WebRTC, the same
+     tech as calls). It arrives as raw bytes, becomes a local blob: link with createObjectURL, and is saved on
+     the receiver's device, so it's never fetched again. If the sender is offline, anyone else online in the
+     chat who already has it can send it instead; otherwise it loads by itself as soon as someone does come online.
+   * Older messages that were already uploaded to Supabase keep working (and also get saved on-device once). */
+const IMG_MAX_SIDE = 1280, IMG_QUALITY = 0.78, CACHE_MAX = 300;
+const P2P_PREFIX = 'p2p:', P2P_CHUNK = 16 * 1024;
+const isP2P = path => typeof path === 'string' && path.startsWith(P2P_PREFIX);
+const p2pConvOf = path => path.slice(P2P_PREFIX.length).split('/')[0];
+
 async function shrinkImage(file) {
   try {
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return file;          // gifs / svgs / others stay as they are
@@ -912,40 +942,242 @@ async function shrinkImage(file) {
     return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
   } catch (_) { return file; }
 }
-const fileUrlMem = new Map();
-const fileKey = path => new Request('https://chatterbox.local/f/' + encodeURIComponent(path));
-async function openFileCache() { try { return await caches.open(CACHE_NAME); } catch (_) { return null; } }
-async function trimFileCache(cache) {
-  try { const keys = await cache.keys(); for (let i = 0; i < keys.length - CACHE_MAX; i++) await cache.delete(keys[i]); } catch (_) {}
+
+/* ---- files saved on this device (IndexedDB). "mine" = things I sent (never trimmed), "got" = things I received ---- */
+const memFiles = new Map();                    // also kept in memory, so sharing works even if the browser refuses to save
+const FDB = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    try {
+      const r = indexedDB.open('chatterbox-files', 1);
+      r.onupgradeneeded = () => { ['mine', 'got'].forEach(n => r.result.createObjectStore(n, { keyPath: 'path' }).createIndex('at', 'at')); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    } catch (e) { rej(e); }
+  }));
+  const run = async (store, mode, fn) => {
+    try {
+      const db = await open();
+      return await new Promise((res, rej) => { const tx = db.transaction(store, mode); const out = fn(tx.objectStore(store)); tx.oncomplete = () => res(out && 'result' in out ? out.result : out); tx.onerror = tx.onabort = () => rej(tx.error); });
+    } catch (_) { return undefined; }
+  };
+  return {
+    async get(store, path) { const rec = await run(store, 'readonly', s => s.get(path)); return rec ? rec.blob : undefined; },
+    async put(store, path, blob) { const r = await run(store, 'readwrite', s => s.put({ path, blob, at: Date.now() })); return r !== undefined; },
+    async del(store, path) { await run(store, 'readwrite', s => s.delete(path)); },
+    async trim(store, max) {
+      try {
+        const db = await open();
+        await new Promise(res => {
+          const tx = db.transaction(store, 'readwrite'), s = tx.objectStore(store), c = s.count();
+          c.onsuccess = () => { let extra = c.result - max; if (extra <= 0) return; s.index('at').openKeyCursor().onsuccess = e => { const cur = e.target.result; if (cur && extra-- > 0) { s.delete(cur.primaryKey); cur.continue(); } }; };
+          tx.oncomplete = tx.onerror = tx.onabort = () => res();
+        });
+      } catch (_) {}
+    }
+  };
+})();
+async function localFile(path) { return memFiles.get(path) || await FDB.get('mine', path) || await FDB.get('got', path); }
+async function saveMine(path, file) { memFiles.set(path, file); return await FDB.put('mine', path, file); }
+
+/* ---- direct transfer between two browsers ---- */
+const p2pSendCh = {}, p2pFetchers = {}, p2pServers = {}, p2pWaiters = [];
+let p2pCh = null, p2pReqId = 0;
+function startP2P() {
+  stopP2P();
+  p2pCh = sb.channel('p2p-' + me.id)
+    .on('broadcast', { event: 'offer' }, ({ payload }) => p2pOnOffer(payload))
+    .on('broadcast', { event: 'answer' }, ({ payload }) => p2pOnAnswer(payload))
+    .on('broadcast', { event: 'ice' }, ({ payload }) => p2pOnIce(payload))
+    .subscribe();
 }
-// Where to load a file from: this device's saved copy if there is one, otherwise download it ONCE and save it.
-function cachedFileUrl(path) {
+function stopP2P() {
+  if (p2pCh) { try { sb.removeChannel(p2pCh); } catch (_) {} p2pCh = null; }
+  Object.values(p2pSendCh).forEach(c => { try { sb.removeChannel(c); } catch (_) {} });
+  Object.keys(p2pSendCh).forEach(k => delete p2pSendCh[k]);
+  [p2pFetchers, p2pServers].forEach(m => Object.keys(m).forEach(k => { try { (m[k].die ? m[k].die('closed') : m[k].pc.close()); } catch (_) {} delete m[k]; }));
+  p2pWaiters.length = 0;
+}
+async function p2pSignal(to, event, payload) {
+  let ch = p2pSendCh[to];
+  if (!ch) {
+    ch = p2pSendCh[to] = sb.channel('p2p-' + to);
+    ch.ready = new Promise(res => ch.subscribe(st => { if (st === 'SUBSCRIBED') res(); }));
+  }
+  await ch.ready;
+  try { await ch.send({ type: 'broadcast', event, payload: { from: me.id, ...payload } }); } catch (_) {}
+}
+const p2pMayServe = (uid, path) => isP2P(path) && !!getConv(p2pConvOf(path))?.conversation_members?.some(m => m.user_id === uid);
+const p2pFlushIce = async (x) => { const q = x.pendingIce.splice(0); for (const c of q) { try { await x.pc.addIceCandidate(c); } catch (_) {} } };
+
+// ---- the side that asks for the file ----
+function p2pConn(uid) {
+  let f = p2pFetchers[uid];
+  if (f && !f.dead) return f;
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  const dc = pc.createDataChannel('files'); dc.binaryType = 'arraybuffer';
+  f = { uid, pc, dc, queue: [], cur: null, open: false, dead: false, pendingIce: [] };
+  p2pFetchers[uid] = f;
+  f.die = why => {
+    if (f.dead) return; f.dead = true;
+    clearTimeout(f.timer); clearTimeout(f.idle);
+    try { pc.close(); } catch (_) {}
+    if (p2pFetchers[uid] === f) delete p2pFetchers[uid];
+    const all = [...(f.cur ? [f.cur] : []), ...f.queue]; f.cur = null; f.queue = [];
+    all.forEach(r => r.reject(new Error(why)));
+  };
+  f.bump = () => { clearTimeout(f.timer); f.timer = setTimeout(() => f.die('timeout'), f.open ? 20000 : 12000); };   // gives up if nothing happens
+  pc.onicecandidate = e => { if (e.candidate) p2pSignal(uid, 'ice', { dir: 'srv', c: e.candidate.toJSON() }); };
+  pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') f.die('connection failed'); };
+  dc.onopen = () => { f.open = true; f.bump(); p2pPump(f); };
+  dc.onclose = () => f.die('closed');
+  dc.onmessage = e => p2pFetcherMsg(f, e.data);
+  f.bump();
+  (async () => { try { const offer = await pc.createOffer(); await pc.setLocalDescription(offer); await p2pSignal(uid, 'offer', { sdp: { type: offer.type, sdp: offer.sdp } }); } catch (_) { f.die('failed'); } })();
+  return f;
+}
+function p2pFetch(uid, path) {
+  return new Promise((resolve, reject) => {
+    const f = p2pConn(uid);
+    clearTimeout(f.idle);
+    f.queue.push({ id: ++p2pReqId, path, resolve, reject });
+    if (f.open) p2pPump(f);
+  });
+}
+function p2pPump(f) {
+  if (f.cur || f.dead || !f.open) return;
+  const r = f.queue.shift();
+  if (!r) { clearTimeout(f.timer); f.idle = setTimeout(() => f.die('idle'), 15000); return; }   // nothing left: close soon
+  f.cur = r; r.chunks = []; r.got = 0; f.bump();
+  try { f.dc.send(JSON.stringify({ t: 'req', id: r.id, path: r.path })); } catch (_) { f.die('failed'); }
+}
+function p2pFetcherMsg(f, data) {
+  const r = f.cur; if (!r) return;
+  f.bump();
+  if (typeof data === 'string') {
+    let m; try { m = JSON.parse(data); } catch (_) { return; }
+    if (m.id !== r.id) return;
+    if (m.t === 'hdr') { r.size = m.size; r.type = m.type; }
+    else if (m.t === 'err') { f.cur = null; r.reject(new Error(m.why || 'unavailable')); p2pPump(f); }
+    else if (m.t === 'end') {
+      f.cur = null;
+      const blob = new Blob(r.chunks, { type: r.type || '' });
+      if (r.size != null && blob.size !== r.size) r.reject(new Error('incomplete')); else r.resolve(blob);
+      p2pPump(f);
+    }
+  } else { r.chunks.push(data); r.got += data.byteLength; }
+}
+async function p2pOnAnswer({ from, sdp }) {
+  const f = p2pFetchers[from]; if (!f || f.dead) return;
+  try { await f.pc.setRemoteDescription(sdp); await p2pFlushIce(f); } catch (_) { f.die('failed'); }
+}
+async function p2pOnIce({ from, dir, c }) {
+  const x = dir === 'srv' ? p2pServers[from] : p2pFetchers[from];
+  if (!x || !c) return;
+  if (x.pc.remoteDescription) { try { await x.pc.addIceCandidate(c); } catch (_) {} } else x.pendingIce.push(c);
+}
+function p2pCandidates(path, senderId) {
+  const members = (getConv(p2pConvOf(path))?.conversation_members || []).map(m => m.user_id).filter(u => u !== me.id && online.has(u));
+  return (senderId && members.includes(senderId) ? [senderId, ...members.filter(u => u !== senderId)] : members).slice(0, 4);
+}
+async function p2pGet(path, senderId) {
+  const cands = p2pCandidates(path, senderId);
+  if (!cands.length) throw new Error('offline');
+  let last;
+  for (const uid of cands) { try { return await p2pFetch(uid, path); } catch (e) { last = e; } }
+  throw last || new Error('unavailable');
+}
+
+// ---- the side that has the file ----
+async function p2pOnOffer({ from, sdp }) {
+  try {
+    if (p2pServers[from]) { try { p2pServers[from].pc.close(); } catch (_) {} }
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const s = { uid: from, pc, dc: null, pendingIce: [], queue: [], busy: false };
+    p2pServers[from] = s;
+    pc.onicecandidate = e => { if (e.candidate) p2pSignal(from, 'ice', { dir: 'fetch', c: e.candidate.toJSON() }); };
+    pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' || pc.connectionState === 'closed') { try { pc.close(); } catch (_) {} if (p2pServers[from] === s) delete p2pServers[from]; } };
+    pc.ondatachannel = e => { s.dc = e.channel; s.dc.binaryType = 'arraybuffer'; s.dc.onmessage = ev => p2pServeMsg(s, ev.data); };
+    await pc.setRemoteDescription(sdp);
+    await p2pFlushIce(s);
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await p2pSignal(from, 'answer', { sdp: { type: answer.type, sdp: answer.sdp } });
+  } catch (_) {}
+}
+async function p2pServeMsg(s, data) {
+  if (typeof data !== 'string') return;
+  let m; try { m = JSON.parse(data); } catch (_) { return; }
+  if (m.t !== 'req') return;
+  s.queue.push(m);
+  if (s.busy) return;
+  s.busy = true;
+  while (s.queue.length) await p2pServeOne(s, s.queue.shift());
+  s.busy = false;
+}
+async function p2pServeOne(s, q) {
+  const dc = s.dc, say = o => { try { dc.send(JSON.stringify({ id: q.id, ...o })); } catch (_) {} };
+  try {
+    if (!p2pMayServe(s.uid, q.path)) return say({ t: 'err', why: 'denied' });
+    const blob = await localFile(q.path);
+    if (!blob) return say({ t: 'err', why: 'missing' });
+    const buf = await blob.arrayBuffer();
+    say({ t: 'hdr', size: buf.byteLength, type: blob.type });
+    for (let off = 0; off < buf.byteLength; off += P2P_CHUNK) {
+      while (dc.readyState === 'open' && dc.bufferedAmount > 1048576) await new Promise(r => setTimeout(r, 20));   // don't flood the connection
+      if (dc.readyState !== 'open') return;
+      dc.send(new Uint8Array(buf, off, Math.min(P2P_CHUNK, buf.byteLength - off)));
+    }
+    say({ t: 'end' });
+  } catch (_) {}
+}
+// when someone comes online, retry pictures that were waiting for them
+function p2pOnlineChanged() {
+  for (let i = p2pWaiters.length - 1; i >= 0; i--) {
+    const w = p2pWaiters[i];
+    if (p2pCandidates(w.path, w.senderId).length) { p2pWaiters.splice(i, 1); w.run(); }
+  }
+}
+
+/* ---- where to load a file from: this device first, then straight from another browser (or Supabase for old files) ---- */
+const fileUrlMem = new Map();
+function cachedFileUrl(path, senderId) {
   if (fileUrlMem.has(path)) return fileUrlMem.get(path);
   const p = (async () => {
-    const cache = await openFileCache();
-    try { if (cache) { const hit = await cache.match(fileKey(path)); if (hit) return URL.createObjectURL(await hit.blob()); } } catch (_) {}
+    let blob = await localFile(path);
+    if (blob) return URL.createObjectURL(blob);
+    if (isP2P(path)) {
+      try { blob = await p2pGet(path, senderId); } catch (_) { return null; }
+      FDB.put('got', path, blob).then(() => FDB.trim('got', CACHE_MAX));
+      return URL.createObjectURL(blob);
+    }
+    // older files that are stored in Supabase: download once, keep on this device
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(path, 3600);
     if (!data?.signedUrl) return null;
     try {
       const res = await fetch(data.signedUrl);
       if (!res.ok) throw new Error('bad');
-      if (cache) { try { await cache.put(fileKey(path), res.clone()); trimFileCache(cache); } catch (_) {} }
-      return URL.createObjectURL(await res.blob());
-    } catch (_) { return data.signedUrl; }                                  // fall back to the normal link
+      blob = await res.blob();
+      FDB.put('got', path, blob).then(() => FDB.trim('got', CACHE_MAX));
+      return URL.createObjectURL(blob);
+    } catch (_) { return data.signedUrl; }
   })();
   fileUrlMem.set(path, p);
   p.then(u => { if (!u) fileUrlMem.delete(path); });
   return p;
 }
-// The sender already has the file, so save it now and they never download their own upload.
-async function seedFileCache(path, file) {
-  try { const cache = await openFileCache(); if (cache) { await cache.put(fileKey(path), new Response(file, { headers: { 'Content-Type': file.type || 'application/octet-stream' } })); trimFileCache(cache); } } catch (_) {}
-}
-// Only start a download when the picture is about to be seen.
+// Only start fetching a picture when it is about to be seen.
 const lazyImgs = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
   entries.forEach(en => { if (en.isIntersecting) { lazyImgs.unobserve(en.target); const f = en.target.__load; if (f) f(); } });
 }, { rootMargin: '300px' }) : null;
 function lazyLoad(el, load) { if (!lazyImgs) return load(); el.__load = load; lazyImgs.observe(el); }
+// Shows "getting it…" / "sender is offline, try again" under a picture or file
+function p2pNote(el, text, retry) {
+  let n = el.nextElementSibling;
+  if (!n || !n.classList.contains('p2pnote')) { n = document.createElement('div'); n.className = 'p2pnote'; n.style.cssText = 'font-size:12px;color:var(--muted);margin:4px 0'; el.after(n); }
+  n.textContent = text || '';
+  if (retry) { const b = document.createElement('button'); b.className = 'btn ghost small'; b.style.marginLeft = '8px'; b.textContent = '↻ Try again'; b.onclick = retry; n.appendChild(b); }
+  n.style.display = text ? '' : 'none';
+}
 
 async function addPending(file) {
   const orig = file.size;
@@ -1009,12 +1241,10 @@ async function sendText() {
       let caption = body;      // the message goes with the first file
       for (let i = 0; i < items.length; i++) {
         const it = items[i], f = it.file;
-        st.textContent = `Uploading ${f.name} (${i + 1}/${items.length})…`;
+        st.textContent = `Sharing ${f.name} (${i + 1}/${items.length})…`;
         const safe = f.name.replace(/[^\w.\-]+/g, '_');
-        const path = `${cid}/${crypto.randomUUID()}-${safe}`;
-        const up = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || 'application/octet-stream' });
-        if (up.error) { alert('Upload failed: ' + up.error.message); break; }
-        seedFileCache(path, f);
+        const path = `${P2P_PREFIX}${cid}/${crypto.randomUUID()}-${safe}`;     // not a Supabase path: the file stays on this device
+        await saveMine(path, f);
         const { data, error } = await sb.from('messages').insert({
           conversation_id: cid, sender_id: me.id, body: caption,
           file_path: path, file_name: f.name, file_type: f.type, file_size: f.size,
@@ -1678,7 +1908,7 @@ async function openModView() {
 function mvMsgHtml(m) {
   const who = (profiles[m.sender_id]?.display_name) || 'Someone';
   const file = m.file_path ? `<div style="margin-top:4px">📎 ${esc(m.file_name || 'file')} <small style="color:var(--muted)">${fmtSize(m.file_size || 0)}</small>
-      <button class="btn ghost small" data-prev="${esc(m.file_path)}" data-type="${esc(m.file_type || '')}" data-name="${esc(m.file_name || '')}">${(m.file_type || '').startsWith('audio/') ? '▶ Play' : 'Preview'}</button></div><div class="mvPrev"></div>` : '';
+      ${isP2P(m.file_path) ? '<small style="color:var(--muted)">· shared directly between members, not stored on the server</small>' : `<button class="btn ghost small" data-prev="${esc(m.file_path)}" data-type="${esc(m.file_type || '')}" data-name="${esc(m.file_name || '')}">${(m.file_type || '').startsWith('audio/') ? '▶ Play' : 'Preview'}</button>`}</div><div class="mvPrev"></div>` : '';
   return `<div class="mvMsg" data-m="${esc(m.id)}" data-fp="${esc(m.file_path || '')}">
     <div class="who"><span>${esc(who)} · ${esc(fmtDay(m.created_at))} ${esc(fmtTime(m.created_at))}</span><button class="btn danger small" data-del="${esc(m.id)}">🗑️ Delete</button></div>
     ${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}${file}</div>`;
@@ -2370,6 +2600,7 @@ function startPresence() {
     online = next;
     if (tab === 'chats') renderChats();
     refreshOnline();
+    p2pOnlineChanged();
     const c = activeId && getConv(activeId); if (c) $('#chSub').textContent = convSub(c);
     if (call) renderCallPeople();
   }).subscribe(async status => {
@@ -2446,7 +2677,7 @@ async function sendSignals(c, toUsers, type, payload = {}) {
   const { error } = await sb.from('call_signals').insert(rows);
   if (error) console.warn('call signal failed:', error.message);
 }
-function stopCalls() { hangUp(true); dismissIncoming(); if (sigCh) { sb.removeChannel(sigCh); sigCh = null; } stopPresence(); }
+function stopCalls() { stopP2P(); hangUp(true); dismissIncoming(); if (sigCh) { sb.removeChannel(sigCh); sigCh = null; } stopPresence(); }
 
 async function handleSignal(s) {
   const p = s.payload || {}, from = s.from_user;
