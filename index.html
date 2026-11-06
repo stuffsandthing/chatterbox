@@ -1913,10 +1913,31 @@ function mvMsgHtml(m) {
     <div class="who"><span>${esc(who)} · ${esc(fmtDay(m.created_at))} ${esc(fmtTime(m.created_at))}</span><button class="btn danger small" data-del="${esc(m.id)}">🗑️ Delete</button></div>
     ${m.body ? `<div class="tx">${esc(m.body)}</div>` : ''}${file}</div>`;
 }
+// files the server stores for a group live in a folder named after the chat (p2p files are not on the server)
+async function mvListFiles(gid) {
+  const paths = [];
+  try {
+    for (let off = 0; off < 5000; off += 1000) {
+      const { data } = await sb.storage.from(BUCKET).list(gid, { limit: 1000, offset: off });
+      if (!data || !data.length) break;
+      paths.push(...data.map(f => gid + '/' + f.name));
+      if (data.length < 1000) break;
+    }
+  } catch (_) {}
+  return paths;
+}
+async function mvRemoveFiles(paths) {
+  let left = 0;
+  for (let i = 0; i < paths.length; i += 100) {
+    const part = paths.slice(i, i + 100);
+    try { const { data } = await sb.storage.from(BUCKET).remove(part); left += part.length - (data ? data.length : 0); } catch (_) { left += part.length; }
+  }
+  return left;
+}
 async function openModGroup(id, name) {
   mvGroup = { id, name, kind: 'all', oldest: null, done: false, busy: false };
   const v = mvShell();
-  v.innerHTML = `<div class="mvHead"><button class="btn ghost small" id="mvBack">‹ Back</button><b>${esc(name)}</b><button class="btn ghost small" id="mvMembers">👥 Members</button><button class="btn danger small" id="mvDelGroup">🗑️ Delete group</button><button class="btn ghost small" id="mvClose">✕</button></div>
+  v.innerHTML = `<div class="mvHead"><button class="btn ghost small" id="mvBack">‹ Back</button><b>${esc(name)}</b><button class="btn ghost small" id="mvMembers">👥 Members</button><button class="btn danger small" id="mvClearGroup">🧹 Clear messages</button><button class="btn danger small" id="mvDelGroup">🗑️ Delete group</button><button class="btn ghost small" id="mvClose">✕</button></div>
     <div class="mvBody"><div class="mvMem hidden" id="mvMem"></div>
     <div class="tabs" id="mvTabs"><button data-k="all" class="on">All</button><button data-k="files">📎 Files</button><button data-k="voice">🎤 Voice</button></div>
     <div class="err" id="mvErr"></div><div id="mvMsgs"><div class="empty">Loading…</div></div><button class="btn ghost small hidden" id="mvMore" style="margin:6px 0 14px">Load older</button></div>`;
@@ -1930,6 +1951,20 @@ async function openModGroup(id, name) {
     $('#mvErr').textContent = ''; $('#mvMsgs').innerHTML = '<div class="empty">Loading…</div>'; $('#mvMore').classList.add('hidden');
     loadModMsgs(true);
   };
+  $('#mvClearGroup').onclick = async () => {
+    const g = mvGroup; if (!g) return;
+    const typed = prompt('Clear ALL messages in “' + g.name + '”?\n\nEvery message and file in this group is deleted for everyone. The group and its members stay. It can’t be undone.\n\nType the group name to confirm:');
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== (g.name || '').trim().toLowerCase()) { $('#mvErr').textContent = 'That didn’t match the group name, so nothing was cleared.'; return; }
+    const btn = $('#mvClearGroup'); btn.disabled = true; btn.textContent = 'Clearing…';
+    const paths = await mvListFiles(g.id);
+    const { data: n, error } = await sb.rpc('admin_clear_group', { p_conv: g.id });
+    if (error) { $('#mvErr').textContent = error.message + (/function|schema cache/i.test(error.message) ? ' (Run the new admin-groups.sql in Supabase.)' : ''); btn.disabled = false; btn.textContent = '🧹 Clear messages'; return; }
+    const left = await mvRemoveFiles(paths);
+    document.querySelectorAll('#msgs [data-mid]').forEach(el => { if (activeId === g.id) el.remove(); });
+    await openModGroup(g.id, g.name);
+    $('#mvErr').textContent = 'Cleared ' + (n ?? 0) + ' message(s).' + (left ? ' ' + left + ' file(s) could not be removed from storage.' : '');
+  };
   $('#mvDelGroup').onclick = async () => {
     const g = mvGroup; if (!g) return;
     const typed = prompt('Delete the whole group “' + g.name + '”?\n\nThis permanently deletes the group, ALL its messages and files, for everyone. It can’t be undone.\n\nType the group name to confirm:');
@@ -1937,21 +1972,10 @@ async function openModGroup(id, name) {
     if (typed.trim().toLowerCase() !== (g.name || '').trim().toLowerCase()) { $('#mvErr').textContent = 'That didn’t match the group name, so nothing was deleted.'; return; }
     const btn = $('#mvDelGroup'); btn.disabled = true; btn.textContent = 'Deleting…';
     // collect the chat's files first (they live in a folder named after the chat), then delete the chat
-    let paths = [];
-    try {
-      for (let off = 0; off < 5000; off += 1000) {
-        const { data } = await sb.storage.from(BUCKET).list(g.id, { limit: 1000, offset: off });
-        if (!data || !data.length) break;
-        paths.push(...data.map(f => g.id + '/' + f.name));
-        if (data.length < 1000) break;
-      }
-    } catch (_) {}
+    const paths = await mvListFiles(g.id);
     const { error } = await sb.rpc('admin_delete_group', { p_conv: g.id });
     if (error) { $('#mvErr').textContent = error.message + (/function|schema cache/i.test(error.message) ? ' (Run the new admin-groups.sql in Supabase.)' : ''); btn.disabled = false; btn.textContent = '🗑️ Delete group'; return; }
-    let left = 0;
-    for (let i = 0; i < paths.length; i += 100) {
-      try { const { data } = await sb.storage.from(BUCKET).remove(paths.slice(i, i + 100)); left += paths.slice(i, i + 100).length - (data ? data.length : 0); } catch (_) { left += paths.slice(i, i + 100).length; }
-    }
+    const left = await mvRemoveFiles(paths);
     try { await loadConvs(); render(); } catch (_) {}
     await openModView();
     if (left) $('#mvList').insertAdjacentHTML('afterbegin', `<div class="err">Group deleted, but ${left} file(s) could not be removed from storage.</div>`);
@@ -1990,9 +2014,15 @@ async function onModClick(e) {
   const box = b.closest('.mvMsg');
   if (b.dataset.prev) {
     b.disabled = true;
-    const { data } = await sb.storage.from(BUCKET).createSignedUrl(b.dataset.prev, 600);
+    const { data, error: perr } = await sb.storage.from(BUCKET).createSignedUrl(b.dataset.prev, 600);
     b.disabled = false;
-    if (!data?.signedUrl) { $('#mvErr').textContent = 'Could not load that file. (Did you run admin-groups.sql in Supabase?)'; return; }
+    if (!data?.signedUrl) {
+      const why = (perr && (perr.message || perr.error)) || '';
+      $('#mvErr').textContent = /not found/i.test(why)
+        ? 'That file is no longer in storage (it may already have been deleted). Reason: ' + why
+        : 'Could not load that file' + (why ? ' (' + why + ')' : '') + '. Re-run the newest admin-groups.sql in Supabase, then make sure you are signed in as an admin.';
+      return;
+    }
     const holder = box.querySelector('.mvPrev');
     if ((b.dataset.type || '').startsWith('image/')) holder.innerHTML = `<img src="${esc(data.signedUrl)}" alt="">`;
     else if ((b.dataset.type || '').startsWith('audio/')) { holder.innerHTML = `<audio controls preload="auto" src="${esc(data.signedUrl)}" style="width:100%;margin-top:6px"></audio>`; holder.firstChild.play().catch(() => {}); b.classList.add('hidden'); }
