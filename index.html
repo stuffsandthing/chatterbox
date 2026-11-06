@@ -1939,11 +1939,31 @@ async function openModGroup(id, name) {
   const v = mvShell();
   v.innerHTML = `<div class="mvHead"><button class="btn ghost small" id="mvBack">‹ Back</button><b>${esc(name)}</b><button class="btn ghost small" id="mvMembers">👥 Members</button><button class="btn danger small" id="mvClearGroup">🧹 Clear messages</button><button class="btn danger small" id="mvDelGroup">🗑️ Delete group</button><button class="btn ghost small" id="mvClose">✕</button></div>
     <div class="mvBody"><div class="mvMem hidden" id="mvMem"></div>
+    <form id="mvSendForm" style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="text" id="mvText" maxlength="1000" placeholder="Send a message to this group as ${esc(myProfile.display_name)}…" autocomplete="off" style="flex:1;min-width:0">
+      <button class="btn" id="mvSend" type="submit">Send</button>
+    </form>
     <div class="tabs" id="mvTabs"><button data-k="all" class="on">All</button><button data-k="files">📎 Files</button><button data-k="voice">🎤 Voice</button></div>
     <div class="err" id="mvErr"></div><div id="mvMsgs"><div class="empty">Loading…</div></div><button class="btn ghost small hidden" id="mvMore" style="margin:6px 0 14px">Load older</button></div>`;
   $('#mvClose').onclick = closeModView;
   $('#mvBack').onclick = openModView;
   $('#mvMore').onclick = () => loadModMsgs(false);
+  $('#mvSendForm').onsubmit = async e => {
+    e.preventDefault();
+    const g = mvGroup, inp = $('#mvText'), body = inp.value.trim();
+    if (!g || !body) return;
+    $('#mvSend').disabled = true;
+    const { data, error } = await sb.rpc('admin_send_message', { p_conv: g.id, p_body: body });
+    if (!$('#mvSend')) return;
+    $('#mvSend').disabled = false;
+    if (error) { $('#mvErr').textContent = error.message + (/function|schema cache/i.test(error.message) ? ' (Run the new admin-groups.sql in Supabase.)' : ''); return; }
+    $('#mvErr').textContent = ''; inp.value = '';
+    if (mvGroup === g && data && g.kind === 'all') {
+      const box = $('#mvMsgs'); const empty = box.querySelector('.empty'); if (empty) empty.remove();
+      box.insertAdjacentHTML('afterbegin', mvMsgHtml(data));          // newest on top
+    }
+    inp.focus();
+  };
   $('#mvTabs').onclick = e => {
     const b = e.target.closest('button'); if (!b || !mvGroup) return;
     document.querySelectorAll('#mvTabs button').forEach(x => x.classList.toggle('on', x === b));
