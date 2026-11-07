@@ -821,7 +821,7 @@ async function appendMsg(m, scroll = true) {
   renderReacts(m.id);
   if (mine) {
     const btn = div.querySelector('.del-msg');
-    if (btn) btn.onclick = (e) => { e.stopPropagation(); deleteOwnMessage(m.id, m.file_path); };
+    if (btn) btn.onclick = (e) => { e.stopPropagation(); deleteOwnMessage(m.id, m.file_path, m.body); };
   }
   // Images + normal files: load signed URL now. Voice notes: only when the user presses Play.
   div.querySelectorAll('[data-path]').forEach(async el => {
@@ -895,16 +895,24 @@ async function appendMsg(m, scroll = true) {
   if (scroll) scrollDown();
 }
 
-async function deleteOwnMessage(id, filePath) {
+async function deleteOwnMessage(id, filePath, body) {
   if (!confirm('Delete this message? It will be removed for everyone.')) return;
   const { error } = await sb.from('messages').delete().eq('id', id).eq('sender_id', me.id);
   if (error) return alert('Could not delete: ' + error.message + '\n\nMake sure your Supabase RLS policy allows deleting your own messages.');
   // remove from UI immediately
   document.querySelectorAll(`[data-mid="${id}"]`).forEach(el => el.remove());
-  // optionally remove the file from storage
-  if (filePath && isP2P(filePath)) { memFiles.delete(filePath); fileUrlMem.delete(filePath); FDB.del('mine', filePath); }
-  else if (filePath) {
-    try { await sb.storage.from(BUCKET).remove([filePath]); } catch (_) {}
+  // New image attachments keep their P2P reference inside the HTML stored in body.
+  // Also include file_path for older attachment messages.
+  const paths = new Set([filePath, ...imageAttachmentPaths(body)].filter(Boolean));
+  for (const path of paths) {
+    if (isP2P(path)) {
+      memFiles.delete(path);
+      fileUrlMem.delete(path);
+      FDB.del('mine', path);
+      FDB.del('got', path);
+    } else {
+      try { await sb.storage.from(BUCKET).remove([path]); } catch (_) {}
+    }
   }
   // also remove from in-call chat if present
   document.querySelectorAll(`#ccMsgs [data-id="${id}"]`).forEach(el => el.remove());
@@ -925,6 +933,16 @@ const IMG_MAX_SIDE = 1280, IMG_QUALITY = 0.78, CACHE_MAX = 300;
 const P2P_PREFIX = 'p2p:', P2P_CHUNK = 16 * 1024;
 const isP2P = path => typeof path === 'string' && path.startsWith(P2P_PREFIX);
 const p2pConvOf = path => path.slice(P2P_PREFIX.length).split('/')[0];
+
+// Image attachments are stored as literal <img ...> markup in messages.body.
+// The browser parses that text as HTML, then the normal P2P loader fills in src.
+function imageAttachmentPaths(body) {
+  const template = document.createElement('template');
+  template.innerHTML = String(body || '');
+  return [...template.content.querySelectorAll('img[data-cb-attachment="image"][data-path]')]
+    .map(img => img.getAttribute('data-path'))
+    .filter(path => isP2P(path));
+}
 
 async function shrinkImage(file) {
   try {
@@ -1245,9 +1263,20 @@ async function sendText() {
         const safe = f.name.replace(/[^\w.\-]+/g, '_');
         const path = `${P2P_PREFIX}${cid}/${crypto.randomUUID()}-${safe}`;     // not a Supabase path: the file stays on this device
         await saveMine(path, f);
+          const isImage = (f.type || '').startsWith('image/');
+        const imageMarkup = isImage
+          ? `<img data-cb-attachment="image" data-path="${esc(path)}" data-name="${esc(f.name)}" alt="${esc(f.name)}" style="cursor:zoom-in">`
+          : '';
+        // Store image attachments as literal HTML text in body. Supabase gets
+        // only this small markup/reference; the image bytes stay in local P2P storage.
+        const messageBody = imageMarkup
+          ? (caption ? caption + '\n' : '') + imageMarkup
+          : caption;
         const { data, error } = await sb.from('messages').insert({
-          conversation_id: cid, sender_id: me.id, body: caption,
-          file_path: path, file_name: f.name, file_type: f.type, file_size: f.size,
+          conversation_id: cid, sender_id: me.id, body: messageBody,
+          ...(!isImage ? {
+            file_path: path, file_name: f.name, file_type: f.type, file_size: f.size
+          } : {}),
           ...(repId ? { reply_to: repId } : {})
         }).select().single();
         if (error) { sendErr(error); break; }
@@ -1386,7 +1415,13 @@ const QUICK_REACTS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
 const MORE_REACTS = ['🔥', '🎉', '👏', '😍', '🤔', '😡', '💯', '👀', '🥳', '😭', '🤣', '👎', '✅', '❌', '🤝', '💀'];
 
 function msgSnippet(m) {
-  if (m.body) return m.body.replace(/\s+/g, ' ').slice(0, 100);
+  if (m.body) {
+    const template = document.createElement('template');
+    template.innerHTML = m.body;
+    const text = (template.content.textContent || '').replace(/\s+/g, ' ').trim();
+    const hasImage = template.content.querySelector('img[data-cb-attachment="image"]');
+    return [text, hasImage ? '🖼️ Photo' : ''].filter(Boolean).join(' · ').slice(0, 100) || (hasImage ? '🖼️ Photo' : 'Message');
+  }
   const t = m.file_type || '';
   if (t.startsWith('audio/')) return '🎤 Voice message';
   if (t.startsWith('image/')) return '🖼️ Photo';
