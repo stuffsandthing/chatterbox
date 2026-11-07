@@ -793,7 +793,10 @@ async function appendMsg(m, scroll = true) {
   let name = '';
   if (!mine && c?.is_group) name = `<div class="nm">${esc((await nameOf(m.sender_id)).display_name)}</div>`;
   let file = '';
-  if (m.file_path) {
+  // New image attachments already exist as literal <img> markup in body.
+  // Keep file_path metadata for admin/file views without rendering a duplicate.
+  const imageMarkupPaths = imageAttachmentPaths(m.body);
+  if (m.file_path && !imageMarkupPaths.includes(m.file_path)) {
     const isImg = (m.file_type || '').startsWith('image/');
     const isAud = (m.file_type || '').startsWith('audio/');
     file = isAud
@@ -1263,7 +1266,7 @@ async function sendText() {
         const safe = f.name.replace(/[^\w.\-]+/g, '_');
         const path = `${P2P_PREFIX}${cid}/${crypto.randomUUID()}-${safe}`;     // not a Supabase path: the file stays on this device
         await saveMine(path, f);
-          const isImage = (f.type || '').startsWith('image/');
+        const isImage = (f.type || '').startsWith('image/');
         const imageMarkup = isImage
           ? `<img data-cb-attachment="image" data-path="${esc(path)}" data-name="${esc(f.name)}" alt="${esc(f.name)}" style="cursor:zoom-in">`
           : '';
@@ -1274,9 +1277,7 @@ async function sendText() {
           : caption;
         const { data, error } = await sb.from('messages').insert({
           conversation_id: cid, sender_id: me.id, body: messageBody,
-          ...(!isImage ? {
-            file_path: path, file_name: f.name, file_type: f.type, file_size: f.size
-          } : {}),
+          file_path: path, file_name: f.name, file_type: f.type, file_size: f.size,
           ...(repId ? { reply_to: repId } : {})
         }).select().single();
         if (error) { sendErr(error); break; }
