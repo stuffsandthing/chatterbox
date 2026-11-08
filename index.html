@@ -290,11 +290,12 @@ input[type=number]:focus{border-color:var(--accent)}
     <form id="resetForm" class="hidden">
       <label for="rUser">Username</label>
       <input type="text" id="rUser" autocapitalize="none" autocomplete="username">
-      <label for="rCode">Recovery code</label>
-      <input type="text" id="rCode" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" autocapitalize="characters" autocomplete="off">
-      <label for="rPass">New password</label>
-      <input type="password" id="rPass" autocomplete="new-password" minlength="6">
-      <button class="btn" type="submit" id="rBtn">Reset password</button>
+      <div id="rInfo" style="margin:10px 0 0;color:var(--muted);font-size:13px;line-height:1.4"></div>
+      <div id="rPassWrap" class="hidden">
+        <label for="rPass">New password</label>
+        <input type="password" id="rPass" autocomplete="new-password" minlength="6">
+      </div>
+      <button class="btn" type="submit" id="rBtn">Request password reset</button>
       <div class="switch"><a id="backToLogin">Back to sign in</a></div>
     </form>
     <div class="err" id="authErr"></div>
@@ -527,10 +528,6 @@ $('#authForm').onsubmit = async e => {
       if (free === false) throw new Error('That username is taken.');
       const { data, error } = await sb.auth.signUp({ email, password, options: { data: { username, display_name } } });
       if (error) throw error;
-      if (data.session) {
-        showCodeAfterStart = true;
-        if (myProfile && !$('#app').classList.contains('hidden')) { showCodeAfterStart = false; showRecoveryCode(true); }
-      }
       if (!data.session) { err.className = 'err ok'; err.textContent = 'Account created! Check your email to confirm, then sign in.'; setMode(false); err.className='err ok'; err.textContent='Account created! Check your email to confirm, then sign in.'; }
     } else {
       const { error } = await sb.auth.signInWithPassword({ email, password });
@@ -570,7 +567,6 @@ async function startApp(user) {
   startP2P();
   startBans();
   if (soundOn && !ac) $('#soundHint').classList.remove('hidden');
-  if (showCodeAfterStart) { showCodeAfterStart = false; showRecoveryCode(true); }
 }
 
 function stopApp() {
@@ -1840,6 +1836,7 @@ async function startBans() {
     if (!me || me.id !== uid) return;
     isAdmin = !!data;
     $('#adminBtn').classList.toggle('hidden', !isAdmin);
+    if (isAdmin) refreshResetBadge();
   });
   banCh = sb.channel('bans-' + uid)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'bans' }, async p => {
@@ -1859,6 +1856,7 @@ async function startBans() {
     .subscribe();
   banPoll = setInterval(async () => {
     loadMyBan(true);
+    if (isAdmin) refreshResetBadge();
     // also refresh the open DM's ban status every 20s
     if (activeId) {
       const c = getConv(activeId);
@@ -1880,7 +1878,7 @@ function stopBans() {
   myBan = null; isAdmin = false; banShownFor = ''; closeModView();
   currentOtherBan = null; otherBanCache = {};
   document.body.classList.remove('banned');
-  $('#adminBtn').classList.add('hidden');
+  $('#adminBtn').classList.add('hidden'); $('#adminBtn').textContent = '🛡️';
   $('#banBar').className = 'hidden'; $('#banOverlay').classList.add('hidden');
   BAN_LOCKED.forEach(sel => { const el = $(sel); if (el) el.disabled = false; });
   $('#composer').classList.remove('locked');
@@ -2104,17 +2102,58 @@ async function onModClick(e) {
   }
 }
 
+async function refreshResetBadge() {
+  if (!isAdmin) return;
+  const { data } = await sb.rpc('admin_list_reset_requests');
+  const n = Array.isArray(data) ? data.filter(r => r.status === 'pending').length : 0;
+  const b = $('#adminBtn');
+  b.textContent = n ? '🛡️ ' + n : '🛡️';
+  b.title = n ? `Admin: ${n} password reset request${n > 1 ? 's' : ''} waiting` : 'Admin: bans';
+}
+
+async function openResetRequests() {
+  if (!isAdmin) return;
+  openModal(`<h3>🔑 Password reset requests</h3>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:10px">Only grant a request if you’re sure it’s really that person. Once granted, they can set a new password from the same device that asked (within 24 hours).</div>
+    <div class="err" id="rrErr"></div>
+    <div id="rrList"><div class="empty">Loading…</div></div>
+    <div class="actions"><button class="btn ghost" id="rrBack">Back</button><button class="btn" id="rrClose">Close</button></div>`);
+  $('#rrClose').onclick = closeModal;
+  $('#rrBack').onclick = () => { closeModal(); openAdmin(); };
+  const paint = async () => {
+    const { data, error } = await sb.rpc('admin_list_reset_requests');
+    if (error) { $('#rrList').innerHTML = ''; $('#rrErr').textContent = error.message + ' (Have you run password-reset-setup.sql in Supabase?)'; return; }
+    const rows = data || [];
+    $('#rrList').innerHTML = rows.length ? rows.map(r => `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:0"><b>${esc(r.display_name || r.username)}</b> <span style="color:var(--muted)">@${esc(r.username)}</span>
+      <div style="color:var(--muted);font-size:12px">${esc(new Date(r.created_at).toLocaleString())} · ${esc(r.status)}</div></div>
+      ${r.status === 'pending' ? `<button class="btn small" data-grant="${esc(r.id)}">Grant</button><button class="btn ghost small" data-deny="${esc(r.id)}">Deny</button>` : ''}
+    </div>`).join('') : '<div class="empty">No requests.</div>';
+  };
+  $('#rrList').onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const id = b.dataset.grant || b.dataset.deny; if (!id) return;
+    b.disabled = true;
+    const { error } = await sb.rpc(b.dataset.grant ? 'admin_grant_reset' : 'admin_deny_reset', { p_id: id });
+    if (error) { $('#rrErr').textContent = error.message; b.disabled = false; return; }
+    await paint(); refreshResetBadge();
+  };
+  paint();
+}
+
 async function openAdmin() {
   if (!isAdmin) return;
   openModal(`<h3>🛡️ Admin: bans</h3>
     <div style="color:var(--muted);font-size:13px;margin-bottom:10px">Banned people can still read their chats, but can’t send messages or react. Only this account can ban or unban.</div>
     <button class="btn ghost small" id="admGroups" style="margin-bottom:10px">👁️ View all group chats</button>
+    <button class="btn ghost small" id="admResets" style="margin-bottom:10px">🔑 Password reset requests</button>
     <input type="text" id="admQ" placeholder="Search people…">
     <div class="err" id="admErr"></div>
     <div id="admList"><div class="empty">Loading…</div></div>
     <div class="actions"><button class="btn ghost" id="admClose">Close</button></div>`);
   $('#admClose').onclick = closeModal;
   $('#admGroups').onclick = () => { closeModal(); openModView(); };
+  $('#admResets').onclick = () => { closeModal(); openResetRequests(); };
   $('#admQ').oninput = paintAdminRows;
   $('#admList').onclick = async e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -2232,11 +2271,35 @@ $('#infoBtn').onclick = () => {
 };
 
 /* ================================================================
-   PASSWORD RECOVERY (no email: username + secret recovery code)
+   PASSWORD RESET (no email: ask the admin, admin grants, you set a new password)
+   The request is tied to this browser by a secret token (only its hash is stored
+   on the server), so only the device that asked can use the admin's approval.
    ================================================================ */
-let showCodeAfterStart = false;
 let modalLocked = false;
+let rState = 'idle';   // idle | pending | denied | granted
 
+function rToken(u) { try { return localStorage.getItem('cb_reset_' + u) || ''; } catch (_) { return ''; } }
+function rNewToken() {
+  const a = new Uint8Array(24); crypto.getRandomValues(a);
+  return Array.from(a, x => x.toString(16).padStart(2, '0')).join('');
+}
+function rSetState(st, msg) {
+  rState = st;
+  $('#rInfo').textContent = msg || '';
+  $('#rPassWrap').classList.toggle('hidden', st !== 'granted');
+  $('#rBtn').textContent = { idle: 'Request password reset', pending: 'Check request status', denied: 'Request again', granted: 'Set new password' }[st];
+}
+async function rCheck(quiet) {
+  const u = $('#rUser').value.trim().toLowerCase();
+  const tok = u && rToken(u);
+  if (!tok) return rSetState('idle', u ? '' : 'Enter your username, then ask the admin to approve a reset.');
+  const { data, error } = await sb.rpc('reset_status', { p_username: u, p_token: tok });
+  if (error) { if (!quiet) $('#authErr').textContent = error.message; return; }
+  if (data === 'pending') rSetState('pending', 'Your request was sent. Once the admin approves it, come back here (on this same device) and press the button.');
+  else if (data === 'granted') rSetState('granted', 'The admin approved your request. Choose a new password.');
+  else if (data === 'denied') rSetState('denied', 'The admin declined your request.');
+  else rSetState('idle', '');
+}
 function showReset(on) {
   $('#authForm').classList.toggle('hidden', on);
   $('#resetForm').classList.toggle('hidden', !on);
@@ -2244,53 +2307,51 @@ function showReset(on) {
   $('#forgotRow').classList.toggle('hidden', on || signupMode);
   $('#authSub').textContent = on ? 'Reset your password' : 'Sign in to start chatting';
   $('#authErr').textContent = '';
+  if (on) {
+    let last = ''; try { last = localStorage.getItem('cb_reset_last') || ''; } catch (_) {}
+    if (last && !$('#rUser').value) $('#rUser').value = last;
+    rSetState('idle', '');
+    rCheck(true);
+  }
 }
 $('#forgotLink').onclick = () => showReset(true);
 $('#backToLogin').onclick = () => showReset(false);
+$('#rUser').onchange = () => rCheck(true);
 
 $('#resetForm').onsubmit = async e => {
   e.preventDefault();
   const err = $('#authErr'); err.className = 'err'; err.textContent = '';
+  const u = $('#rUser').value.trim().toLowerCase();
+  if (!u) { err.textContent = 'Enter your username first.'; return; }
   const btn = $('#rBtn'); btn.disabled = true;
-  const { data, error } = await sb.rpc('reset_password_with_code', {
-    uname: $('#rUser').value, code: $('#rCode').value, newpass: $('#rPass').value
-  });
-  btn.disabled = false;
-  if (error) { err.textContent = error.message; return; }
-  if (data === 'ok') {
-    $('#rCode').value = ''; $('#rPass').value = '';
-    showReset(false); setMode(false);
-    err.className = 'err ok';
-    err.textContent = 'Password changed! Sign in with your email and the new password, then make a new recovery code from your profile (click your picture).';
-  } else {
-    err.textContent = {
-      bad: 'Wrong username or recovery code.',
-      locked: 'Too many wrong tries. Wait 15 minutes and try again.',
-      short: 'Your new password must be at least 6 characters.'
-    }[data] || 'Something went wrong.';
-  }
+  try {
+    if (rState === 'idle' || rState === 'denied') {
+      const tok = rNewToken();
+      const { data, error } = await sb.rpc('request_password_reset', { p_username: u, p_token: tok });
+      if (error) throw error;
+      if (data === 'limit') { err.textContent = 'Too many requests. Try again later.'; return; }
+      // Same answer whether or not the username exists, so nobody can probe for accounts.
+      try { localStorage.setItem('cb_reset_' + u, tok); localStorage.setItem('cb_reset_last', u); } catch (_) {}
+      rSetState('pending', 'Request sent. Ask the admin to approve it, then come back here (on this same device) and press the button.');
+    } else if (rState === 'pending') {
+      await rCheck(false);
+    } else if (rState === 'granted') {
+      const np = $('#rPass').value;
+      if (np.length < 6) { err.textContent = 'Your new password must be at least 6 characters.'; return; }
+      const { data, error } = await sb.rpc('reset_password_granted', { p_username: u, p_token: rToken(u), p_newpass: np });
+      if (error) throw error;
+      if (data === 'ok') {
+        try { localStorage.removeItem('cb_reset_' + u); localStorage.removeItem('cb_reset_last'); } catch (_) {}
+        $('#rPass').value = '';
+        showReset(false); setMode(false);
+        err.className = 'err ok';
+        err.textContent = 'Password changed! Sign in with your email and the new password.';
+      } else if (data === 'short') err.textContent = 'Your new password must be at least 6 characters.';
+      else { err.textContent = 'This approval is no longer valid. Please request a new reset.'; rSetState('idle', ''); }
+    }
+  } catch (ex) { err.textContent = ex.message || 'Something went wrong.'; }
+  finally { btn.disabled = false; }
 };
-
-async function showRecoveryCode(first) {
-  if (!first && !confirm('This replaces your old recovery code with a new one. Continue?')) return;
-  const { data: code, error } = await sb.rpc('generate_recovery_code');
-  if (error) return alert('Could not make a recovery code: ' + error.message + '\n\nHave you run recovery-setup.sql in Supabase?');
-  modalLocked = true;       // so a stray click or Esc can't close it before it's saved
-  openModal(`<h3>${first ? 'Welcome! ' : ''}Your recovery code</h3>
-    <p style="margin:0 0 12px;color:var(--muted)">If you ever forget your password, this code lets you set a new one without email. It’s shown <b>only once</b>, so save it somewhere safe (a screenshot, your notes, or a password manager). Anyone with your username and this code can take over your account, so keep it private.</p>
-    <div style="font:600 19px/1.3 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px;text-align:center;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:14px;user-select:all">${esc(code)}</div>
-    <div class="actions"><button class="btn ghost" id="rcCopy">Copy</button><button class="btn ghost" id="rcDl">Download</button><button class="btn" id="rcDone">I’ve saved it</button></div>`);
-  $('#rcCopy').onclick = async () => {
-    try { await navigator.clipboard.writeText(code); $('#rcCopy').textContent = 'Copied ✓'; }
-    catch { alert('Couldn’t copy automatically. Select the code and copy it by hand.'); }
-  };
-  $('#rcDl').onclick = () => {
-    const blob = new Blob([`Chatterbox recovery code\nUsername: ${myProfile.username}\nCode: ${code}\n`], { type: 'text/plain' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'chatterbox-recovery-code.txt';
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  };
-  $('#rcDone').onclick = () => { modalLocked = false; closeModal(); };
-}
 
 function openChangePassword() {
   openModal(`<h3>Change password</h3>
@@ -2428,12 +2489,11 @@ $('#meAv').onclick = () => {
     <div style="color:var(--muted);font-size:13px;margin-bottom:4px">Display name</div>
     <input type="text" id="pfName" maxlength="40" value="${esc(myProfile.display_name)}">
     <div style="color:var(--muted);font-size:13px;margin-top:8px">Username: @${esc(myProfile.username)}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn ghost small" id="pfCode">New recovery code</button><button class="btn ghost small" id="pfPass">Change password</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn ghost small" id="pfPass">Change password</button></div>
     <div class="actions"><button class="btn ghost" id="pfClose">Close</button><button class="btn" id="pfSave">Save name</button></div>`);
   setAv($('#pfAv'), myProfile.avatar_url, myProfile.display_name);
   $('#pfClose').onclick = closeModal;
   $('#pfKing').onchange = e => setKing(e.target.checked);
-  $('#pfCode').onclick = () => showRecoveryCode(false);
   $('#pfPass').onclick = openChangePassword;
   $('#pfPic').onclick = () => openAvatarPicker({
     title: 'Profile picture', current: myProfile.avatar_url, name: myProfile.display_name,
