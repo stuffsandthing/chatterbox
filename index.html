@@ -2042,7 +2042,7 @@ function notifyIncoming(m) {
   if (isMuted(m.conversation_id)) return;
   const away = tabAway();
   const watching = !away && m.conversation_id === activeId;
-  console.log('[Chatterbox] message from someone else — master on:', soundOn, '| audio:', ac ? ac.state : 'not unlocked (click the page once)', '| tab away:', away, '| watching this chat:', watching);
+  console.log('[Chatterbox] ALERT for message — sender:', m.sender_id, '| me:', me && me.id, '| same person?', m.sender_id === (me && me.id), '| master on:', soundOn, '| audio:', ac ? ac.state : 'not unlocked (click the page once)', '| tab away:', away, '| watching this chat:', watching);
   if (watching) return;                         // you're looking right at it
   if (notifSet.textSound) playDing();
   if (away) {
