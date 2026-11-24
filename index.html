@@ -316,7 +316,7 @@ input[type=number]:focus{border-color:var(--accent)}
       <div class="av" id="meAv"></div>
       <div class="who"><b id="meName"></b><span id="meUser"></span></div>
       <button class="btn ghost small hidden" id="adminBtn" title="Admin: bans">🛡️</button>
-      <button class="btn ghost small" id="soundBtn" title="Message sound on/off">🔔</button>
+      <button class="btn ghost small" id="soundBtn" title="Notifications on/off">🔔</button>
       <button class="btn ghost small" id="logout">Log out</button>
     </div>
     <div id="soundHint" class="hidden">🔔 Click anywhere on this page once to turn on message sounds</div>
@@ -564,7 +564,7 @@ async function startApp(user) {
   setAv($('#meAv'), p.avatar_url, p.display_name); $('#meAv').title = 'Edit your profile';
   $('#meName').textContent = p.display_name;
   $('#meUser').textContent = '@' + p.username;
-  await Promise.all([loadContacts(), loadConvs()]);
+  await Promise.all([loadContacts(), loadConvs(), loadBlockedUsers()]);
   render();
   subscribe();
   startPresence();
@@ -580,6 +580,7 @@ function stopApp() {
   if (reactCh) { sb.removeChannel(reactCh); reactCh = null; }
   stopBans();
   me = null; myProfile = null; convs = []; contacts = []; activeId = null; profiles = {}; unread.clear();
+  blockedIds = new Set(); blockStatusCache.clear(); currentBlockStatus = { iBlocked: false, theyBlockedMe: false }; currentOtherBan = null;
   $('#app').classList.add('hidden'); $('#app').classList.remove('show-chat');
   $('#auth').classList.remove('hidden');
   $('#password').value = '';
@@ -707,11 +708,17 @@ async function renderPeople() {
     <div class="row" style="cursor:default">
       <div class="av" data-uid="${p.id}" style="${avStyle(p.avatar_url)}">${avInner(p.avatar_url, p.display_name)}</div>
       <div class="t"><b>${esc(p.display_name)}</b><span>@${esc(p.username)}</span></div>
-      <button class="btn small" data-chat="${p.id}">Chat</button>
+      <button class="btn small" data-chat="${p.id}" ${blockedIds.has(p.id) ? 'disabled' : ''}>Chat</button>
       <button class="btn ghost small" data-toggle="${p.id}">${contactIds.has(p.id) ? 'Remove' : 'Add'}</button>
+      <button class="btn ghost small" data-block="${p.id}">${blockedIds.has(p.id) ? 'Unblock' : 'Block'}</button>
     </div>`).join('');
   el.querySelectorAll('[data-chat]').forEach(b => b.onclick = () => startDM(b.dataset.chat));
   el.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => toggleContact(b.dataset.toggle));
+  el.querySelectorAll('[data-block]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    await setUserBlocked(b.dataset.block, !blockedIds.has(b.dataset.block));
+    if (tab === 'people') renderPeople();
+  });
   refreshOnline();
 }
 
@@ -721,7 +728,85 @@ async function toggleContact(id) {
   await loadContacts(); renderPeople();
 }
 
+async function loadBlockedUsers() {
+  if (!me) return;
+  const { data, error } = await sb.from('user_blocks').select('blocked_id').eq('blocker_id', me.id);
+  if (error) {
+    if (!loadBlockedUsers._warned) {
+      loadBlockedUsers._warned = true;
+      console.warn('[Chatterbox] Block list is unavailable. Run blocks-setup.sql in Supabase:', error.message);
+    }
+    return;
+  }
+  blockedIds = new Set((data || []).map(row => row.blocked_id));
+  blockedIds.forEach(uid => blockStatusCache.delete(uid));
+}
+
+async function getBlockStatus(uid, force = false) {
+  if (!uid || !me || uid === me.id) return { iBlocked: false, theyBlockedMe: false };
+  const cached = blockStatusCache.get(uid);
+  if (!force && cached && Date.now() - cached.fetchedAt < 15000) return cached.status;
+  try {
+    const { data, error } = await sb.rpc('get_block_status', { p_user: uid });
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    const status = {
+      iBlocked: !!row?.i_blocked || blockedIds.has(uid),
+      theyBlockedMe: !!row?.they_blocked_me
+    };
+    blockStatusCache.set(uid, { status, fetchedAt: Date.now() });
+    return status;
+  } catch (error) {
+    if (!getBlockStatus._warned) {
+      getBlockStatus._warned = true;
+      console.warn('[Chatterbox] Could not check block status. Run blocks-setup.sql in Supabase:', error.message);
+    }
+    return { iBlocked: blockedIds.has(uid), theyBlockedMe: false };
+  }
+}
+
+async function setUserBlocked(uid, shouldBlock) {
+  if (!uid || uid === me?.id) return false;
+  const person = profiles[uid];
+  const label = person?.display_name || 'this person';
+  if (shouldBlock && !confirm('Block ' + label + '? They will not be able to message or call you, and you will not be able to message or call them.')) return false;
+
+  // End an active direct call / dismiss an incoming call before the database
+  // starts rejecting signalling between the two accounts.
+  if (shouldBlock && incoming?.from === uid) {
+    const inc = incoming;
+    await sendSignals({ id: inc.callId, convId: inc.convId }, [uid], 'busy');
+    dismissIncoming();
+  }
+  if (shouldBlock && call) {
+    const c = getConv(call.convId);
+    if (c && !c.is_group && dmOther(c) === uid) await hangUp();
+  }
+
+  const query = sb.from('user_blocks');
+  const result = shouldBlock
+    ? await query.insert({ blocker_id: me.id, blocked_id: uid })
+    : await query.delete().eq('blocker_id', me.id).eq('blocked_id', uid);
+  if (result.error && !/duplicate key/i.test(result.error.message || '')) {
+    alert('Could not update your block list: ' + result.error.message + '\n\nMake sure you have run blocks-setup.sql in Supabase.');
+    return false;
+  }
+
+  if (shouldBlock) blockedIds.add(uid); else blockedIds.delete(uid);
+  blockStatusCache.delete(uid);
+  const status = await getBlockStatus(uid, true);
+  const active = activeId && getConv(activeId);
+  if (active && !active.is_group && dmOther(active) === uid) {
+    currentBlockStatus = status;
+    applyBanState(false);
+  }
+  if (tab === 'people') renderPeople();
+  return true;
+}
+
 async function startDM(otherId) {
+  const status = await getBlockStatus(otherId, true);
+  if (status.iBlocked) return alert('You have blocked this person. Unblock them in People before starting a chat.');
   const { data, error } = await sb.rpc('create_dm', { other: otherId });
   if (error) return alert(error.message);
   await loadConvs();
@@ -738,6 +823,7 @@ function showChat(on) {
 $('#back').onclick = () => {
   activeId = null;
   currentOtherBan = null;
+  currentBlockStatus = { iBlocked: false, theyBlockedMe: false };
   applyBanState(false);   // clear the “this person is banned” bar
   showChat(false);
   render();
@@ -747,6 +833,7 @@ async function openConv(id) {
   activeId = id; unread.delete(id);
   stopRec(true); clearPending(); clearReply(); closeMsgMenu();
   currentOtherBan = null;          // reset until we know
+  currentBlockStatus = { iBlocked: false, theyBlockedMe: false };
   const c = getConv(id);
   if (!c) return;
   // refresh the other person's profile so last_seen is up to date
@@ -763,7 +850,13 @@ async function openConv(id) {
   }
   // Check whether the other person in a DM is banned (so we can block messaging them)
   if (otherId && !c.is_group) {
-    currentOtherBan = await getUserBan(otherId);
+    const [ban, blockStatus] = await Promise.all([
+      getUserBan(otherId),
+      getBlockStatus(otherId, true)
+    ]);
+    if (activeId !== id) return;
+    currentOtherBan = ban;
+    currentBlockStatus = blockStatus;
   }
   applyBanState(false);            // update composer lock + ban bar for own/other ban
   $('#chTitle').textContent = convTitle(c);
@@ -1419,6 +1512,7 @@ function renderPending() {
 async function sendText() {
   if (sending || !activeId) return;
   if (banGuard()) return;
+  if (currentPairBlocked()) { applyBanState(false); return; }
   const t = $('#text'); let body = t.value.trim();
   if (!body && !pending.length) return;
   // Block swear / cuss words
@@ -1795,14 +1889,19 @@ try { soundOn = localStorage.getItem('chatterbox-sound') !== 'off'; } catch {}
 function paintSound() {
   const b = $('#soundBtn'); if (!b) return;
   b.textContent = soundOn ? '🔔' : '🔕';
-  b.title = soundOn ? 'Message sound is on (click to mute)' : 'Message sound is off (click to turn on)';
+  b.title = soundOn ? 'Notifications are on (click to turn off)' : 'Notifications are off (click to turn on)';
 }
 paintSound();
-$('#soundBtn').onclick = () => {
+$('#soundBtn').onclick = async () => {
   soundOn = !soundOn;
   try { localStorage.setItem('chatterbox-sound', soundOn ? 'on' : 'off'); } catch {}
   paintSound();
-  if (soundOn) { lastDing = 0; playDing(); }   // little preview so you know it works
+  if (!soundOn && incoming) {
+    const inc = incoming;
+    await sendSignals({ id: inc.callId, convId: inc.convId }, [inc.from], 'busy');
+    dismissIncoming();
+  }
+  if (soundOn) { lastDing = 0; playDing(); }
 };
 
 function playDing() {
@@ -1826,6 +1925,7 @@ function playDing() {
 }
 
 function notifyIncoming(m) {
+  if (!soundOn) return;
   const away = document.hidden || !document.hasFocus();
   const watching = !away && m.conversation_id === activeId;
   console.log('[Chatterbox] message from someone else — sound on:', soundOn, '| audio:', ac ? ac.state : 'not unlocked (click the page once)', '| tab away:', away, '| watching this chat:', watching);
@@ -1847,6 +1947,14 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rese
 let isAdmin = false, myBan = null, banTick = null, banPoll = null, banCh = null, banShownFor = '';
 let currentOtherBan = null;          // ban info of the other person in the open DM (null for groups / no ban)
 let otherBanCache = {};              // uid -> { ban, fetchedAt }
+let blockedIds = new Set();          // people this account has blocked
+let blockStatusCache = new Map();    // uid -> { status, fetchedAt }
+let currentBlockStatus = { iBlocked: false, theyBlockedMe: false };
+
+function currentPairBlocked() {
+  const c = activeId && getConv(activeId);
+  return !!(c && !c.is_group && (currentBlockStatus.iBlocked || currentBlockStatus.theyBlockedMe));
+}
 const BAN_LOCKED = ['#text', '#send', '#attach', '#mic', '#ccText', '#ccSend'];
 
 function fmtLeft(ms) {
@@ -1927,9 +2035,11 @@ async function loadMyBan(notify) {
 function applyBanState(notify) {
   const ownOn = banActive(), was = document.body.classList.contains('banned');
   const otherOn = otherBanActive();
-  const lock = ownOn || otherOn;
+  const blockOn = currentPairBlocked();
+  const lock = ownOn || otherOn || blockOn;
   document.body.classList.toggle('banned', ownOn);
   BAN_LOCKED.forEach(sel => { const el = $(sel); if (el) el.disabled = lock || (sel === '#send' && sending); });
+  ['#callVoice', '#callVideo'].forEach(sel => { const el = $(sel); if (el) el.disabled = blockOn; });
   $('#composer').classList.toggle('locked', lock);
   if (ownOn) {
     $('#text').placeholder = 'You are banned from sending messages';
@@ -1937,6 +2047,9 @@ function applyBanState(notify) {
   } else if (otherOn) {
     $('#text').placeholder = 'This person is banned — you can’t message them';
     $('#ccText').placeholder = 'This person is banned';
+  } else if (blockOn) {
+    $('#text').placeholder = currentBlockStatus.iBlocked ? 'You blocked this person' : 'This person blocked you';
+    $('#ccText').placeholder = 'Messaging is blocked';
   } else {
     $('#text').placeholder = pending.length ? 'Add a message (optional)…' : 'Type a message…';
     $('#ccText').placeholder = 'Message…';
@@ -1954,11 +2067,17 @@ function applyBanState(notify) {
     bar.innerHTML = '🚫 <b>This person has been banned so you can no longer message them until ' +
       esc(otherBanEndText()) + '.</b>';
     if (!banTick) banTick = setInterval(tickBan, 1000);
+  } else if (blockOn) {
+    if (banTick) { clearInterval(banTick); banTick = null; }
+    bar.className = '';
+    bar.textContent = currentBlockStatus.iBlocked
+      ? '🚫 You blocked this person. They cannot message or call you, and you cannot message or call them. Unblock them in Info or People.'
+      : '🚫 This person blocked you. You cannot message or call them.';
   } else {
     if (banTick) { clearInterval(banTick); banTick = null; }
-    if (was) {                                           // the ban just ended (or the admin lifted it)
+    if (was) {
       bar.className = 'ok'; bar.textContent = '✅ Your ban is over. You can send messages again.';
-      setTimeout(() => { if (!banActive() && !otherBanActive()) bar.className = 'hidden'; }, 6000);
+      setTimeout(() => { if (!banActive() && !otherBanActive() && !currentPairBlocked()) bar.className = 'hidden'; }, 6000);
       if (!$('#banOverlay').classList.contains('hidden')) paintBanOverlay();
     } else {
       bar.className = 'hidden';
@@ -2423,6 +2542,7 @@ $('#newGroup').onclick = () => {
 
 $('#infoBtn').onclick = () => {
   const c = getConv(activeId); if (!c) return;
+  const otherUserId = c.is_group ? '' : dmOther(c);
   const memberIds = new Set(c.conversation_members.map(m => m.user_id));
   const people = c.conversation_members.map(m => m.profiles).filter(Boolean);
   const addable = contacts.filter(x => !memberIds.has(x.id));
@@ -2432,10 +2552,14 @@ $('#infoBtn').onclick = () => {
     ${c.is_group && addable.length ? `<div style="margin:14px 0 6px;color:var(--muted);font-size:13px">Add a contact</div>
       <div style="display:flex;gap:8px"><select id="addSel">${addable.map(x => `<option value="${x.id}">${esc(x.display_name)} (@${esc(x.username)})</option>`).join('')}</select><button class="btn" id="addBtn">Add</button></div>` : ''}
     <div class="actions">
-      ${c.is_group ? '<button class="btn danger" id="leaveBtn">Leave group</button>' : ''}
+      ${c.is_group ? '<button class="btn danger" id="leaveBtn">Leave group</button>' : `<button class="btn ${currentBlockStatus.iBlocked ? 'ghost' : 'danger'}" id="blockUserBtn">${currentBlockStatus.iBlocked ? 'Unblock person' : 'Block person'}</button>`}
       <button class="btn ghost" id="mClose">Close</button>
     </div>`);
   $('#mClose').onclick = closeModal;
+  if ($('#blockUserBtn')) $('#blockUserBtn').onclick = async () => {
+    const changed = await setUserBlocked(otherUserId, !currentBlockStatus.iBlocked);
+    if (changed) { closeModal(); $('#infoBtn').click(); }
+  };
   if ($('#logoBtn')) $('#logoBtn').onclick = () => openAvatarPicker({
     title: 'Group logo', current: c.avatar_url, name: convTitle(c),
     onPick: av => setGroupAvatar(c, av),
@@ -3031,10 +3155,18 @@ async function handleSignal(s) {
 }
 
 /* ---- incoming ring ---- */
-function onRing(s) {
+async function onRing(s) {
   if (window.__lockShown) return;
   const p = s.payload || {};
   if (call && call.id === s.call_id) return;
+  let conv = getConv(s.conversation_id);
+  if (!conv) { await loadConvs(); conv = getConv(s.conversation_id); }
+  const blockStatus = await getBlockStatus(s.from_user, true);
+  if (blockStatus.iBlocked || blockStatus.theyBlockedMe) return;
+  if (!soundOn) {
+    await sendSignals({ id: s.call_id, convId: s.conversation_id }, [s.from_user], 'busy');
+    return;
+  }
   if (call || incoming) {
     if (!(incoming && incoming.callId === s.call_id)) sendSignals({ id: s.call_id, convId: s.conversation_id }, [s.from_user], 'busy');
     return;
@@ -3069,14 +3201,24 @@ $('#inDecline').onclick = () => {
 $('#callVoice').onclick = () => preCall('audio');
 $('#callVideo').onclick = () => preCall('video');
 
-function preCall(kind) {
+async function preCall(kind) {
   if (!activeId) return;
   if (call || incoming) return alert('You are already in a call.');
   const c = getConv(activeId), ids = others({ convId: c.id });
-  const onl = ids.filter(u => online.has(u));
+  if (!c.is_group) {
+    currentBlockStatus = await getBlockStatus(dmOther(c), true);
+    applyBanState(false);
+    if (currentPairBlocked()) return alert('Messaging and calls are blocked between you and this person.');
+  }
+  const available = [];
+  for (const uid of ids) {
+    const status = await getBlockStatus(uid, true);
+    if (!status.iBlocked && !status.theyBlockedMe) available.push(uid);
+  }
+  const onl = available.filter(u => online.has(u));
   openModal(`<h3>${kind === 'video' ? 'Video' : 'Voice'} call · ${esc(convTitle(c))}</h3>
     <div style="color:var(--muted);font-size:13px;margin-bottom:8px">Only people who are online right now can be rung.</div>
-    ${ids.map(u => `<div class="chk">${online.has(u) ? '🟢' : '⚪'} <b>${esc(nameFor(u))}</b> <span style="color:var(--muted)">${online.has(u) ? 'online, will be rung' : 'offline, can’t be rung'}</span></div>`).join('')}
+    ${available.map(u => `<div class="chk">${online.has(u) ? '🟢' : '⚪'} <b>${esc(nameFor(u))}</b> <span style="color:var(--muted)">${online.has(u) ? 'online, will be rung' : 'offline, can’t be rung'}</span></div>`).join('')}
     ${onl.length ? '' : '<div class="empty" style="padding:14px 0 0">Nobody here is online right now.</div>'}
     <div class="actions"><button class="btn ghost" id="pcCancel">Cancel</button>${onl.length ? `<button class="btn" id="pcStart">Call ${onl.length} online</button>` : ''}</div>`);
   $('#pcCancel').onclick = closeModal;
@@ -3085,9 +3227,15 @@ function preCall(kind) {
 
 async function beginCall(kind, convId) {
   const ids = others({ convId });
+  const allowed = [];
+  for (const uid of ids) {
+    const status = await getBlockStatus(uid, true);
+    if (!status.iBlocked && !status.theyBlockedMe) allowed.push(uid);
+  }
+  if (!allowed.length) return alert('There are no people available to call (some may be blocked).');
   if (!(await joinCall(crypto.randomUUID(), convId, kind, true))) return;
   ids.forEach(u => { call.status[u] = 'offline'; });
-  ringMembers(ids.filter(u => online.has(u)));
+  ringMembers(allowed.filter(u => online.has(u)));
 }
 
 function ringMembers(uids) {
@@ -3519,7 +3667,7 @@ async function sendCallMsg() {
   const t = $('#ccText');
   let body = clampText(t.value).trim();
   if (!body || !call) return;
-  if (banGuard()) return;
+  if (banGuard() || currentPairBlocked()) { applyBanState(false); return; }
   body = cleanOrBlock(body);
   if (body === null) return;
   if (!spamOk(body, true)) return;
