@@ -270,6 +270,31 @@ input[type=number]:focus{border-color:var(--accent)}
   #back{display:inline-block}
   .msg{max-width:88%}
 }
+
+/* settings page */
+#setView{position:fixed;inset:0;z-index:19;background:var(--bg);display:flex;flex-direction:column}
+#setView .mvHead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+#setView .mvHead b{flex:1;min-width:0}
+#setBody{flex:1;overflow-y:auto;padding:14px;max-width:640px;width:100%;margin:0 auto}
+#setBody h4{margin:22px 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#setBody h4:first-child{margin-top:4px}
+.setcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.setrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.setrow:last-child{border-bottom:0}
+.setrow .tx{flex:1;min-width:0}
+.setrow .tx b{display:block;font-weight:600}
+.setrow .tx small{display:block;color:var(--muted);font-size:13px;line-height:1.35}
+.setrow.static{cursor:default}
+#setBody input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;width:42px;height:24px;margin:0;padding:0;border-radius:999px;background:var(--line);position:relative;cursor:pointer;transition:background .15s;border:0}
+#setBody input[type=checkbox]::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
+#setBody input[type=checkbox]:checked{background:var(--accent)}
+#setBody input[type=checkbox]:checked::after{transform:translateX(18px)}
+#setBody input[type=radio]{flex:none;width:18px;height:18px;margin:0;padding:0;accent-color:var(--accent)}
+.setnote{color:var(--muted);font-size:13px;line-height:1.45;margin:8px 2px 0}
+.setbtns{display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px}
+.setwarn{background:rgba(220,38,38,.12);color:var(--danger);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.4;margin-top:8px}
+.setgood{color:#16a34a}
+.mutedico{margin-left:6px;font-size:12px;opacity:.7}
 </style>
 </head>
 <body>
@@ -317,6 +342,7 @@ input[type=number]:focus{border-color:var(--accent)}
       <div class="who"><b id="meName"></b><span id="meUser"></span></div>
       <button class="btn ghost small hidden" id="adminBtn" title="Admin: bans">🛡️</button>
       <button class="btn ghost small" id="soundBtn" title="Notifications on/off">🔔</button>
+      <button class="btn ghost small" id="setBtn" title="Notification settings">⚙️</button>
       <button class="btn ghost small" id="logout">Log out</button>
     </div>
     <div id="soundHint" class="hidden">🔔 Click anywhere on this page once to enable notification sounds</div>
@@ -397,6 +423,11 @@ input[type=number]:focus{border-color:var(--accent)}
 </div>
 
 <div id="banOverlay" class="hidden"><div id="banCard"></div></div>
+
+<div id="setView" class="hidden">
+  <div class="mvHead"><button class="btn ghost small" id="setBack">← Back</button><b>⚙️ Settings · Notifications</b></div>
+  <div id="setBody"></div>
+</div>
 
 <div id="modalWrap" class="hidden"><div id="modal"></div></div>
 
@@ -576,6 +607,7 @@ async function startApp(user) {
 
 function stopApp() {
   stopCalls();
+  if (typeof closeSettings === 'function') closeSettings();
   if (channel) { sb.removeChannel(channel); channel = null; }
   if (reactCh) { sb.removeChannel(reactCh); reactCh = null; }
   stopBans();
@@ -673,7 +705,7 @@ function renderChats() {
   el.innerHTML = convs.map(c => `
     <div class="row ${c.id === activeId ? 'on' : ''} ${unread.has(c.id) ? 'unread' : ''}" data-id="${c.id}">
       <div class="av" data-uid="${dmOther(c)}" style="${avStyle(convAvatar(c))}">${avInner(convAvatar(c), convTitle(c))}</div>
-      <div class="t"><b>${esc(convTitle(c))}</b><span>${c.is_group ? 'Group · ' : ''}${esc(convSub(c))}</span></div>
+      <div class="t"><b>${esc(convTitle(c))}${isMuted(c.id) ? '<span class="mutedico" title="Muted">🔕</span>' : ''}</b><span>${c.is_group ? 'Group · ' : ''}${esc(convSub(c))}</span></div>
       ${unread.has(c.id) ? '<div class="dot"></div>' : ''}
     </div>`).join('');
   el.querySelectorAll('.row').forEach(r => r.onclick = () => openConv(r.dataset.id));
@@ -1896,34 +1928,67 @@ function spamOk(body, inCall) {
 }
 
 /* ================================================================
-   NEW-MESSAGE DING + tab title count
+   NOTIFICATIONS: dings, desktop pop-ups, call alerts + SETTINGS PAGE
+   - 🔔 button = quick master on/off.   ⚙️ button = the full settings page.
+   - Settings are saved in this browser (localStorage).
+   - Pop-ups work while Chatterbox is open in a tab (even a background tab
+     or a minimised window). A fully closed tab can't be reached without a
+     push server.
    ================================================================ */
 const BASE_TITLE = document.title;
-let soundOn = true, lastDing = 0, unseen = 0;
+let soundOn = true, lastDing = 0, unseen = 0, ringName = '';
 try { soundOn = localStorage.getItem('chatterbox-sound') !== 'off'; } catch {}
+
+const SET_KEY = 'chatterbox-notif-v1';
+const notifSet = { callMode: 'ring', callDesktop: true, textSound: true, textDesktop: true, textPreview: true, snoozeUntil: 0, muted: [] };
+try { Object.assign(notifSet, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch {}
+if (!Array.isArray(notifSet.muted)) notifSet.muted = [];
+if (!['ring', 'quiet', 'dnd'].includes(notifSet.callMode)) notifSet.callMode = 'ring';
+function saveSet() { try { localStorage.setItem(SET_KEY, JSON.stringify(notifSet)); } catch {} }
+
+const snoozed = () => notifSet.snoozeUntil > Date.now();
+const silenced = () => !soundOn || snoozed();      // everything off (master off, or snoozed)
+const isMuted = id => notifSet.muted.includes(id);
+function setMuted(id, on) {
+  notifSet.muted = notifSet.muted.filter(x => x !== id);
+  if (on) notifSet.muted.push(id);
+  saveSet();
+  if (typeof render === 'function' && typeof me !== 'undefined' && me) render();
+  if (!$('#setView').classList.contains('hidden')) renderSettings();
+}
 
 function paintSound() {
   const b = $('#soundBtn'); if (!b) return;
-  b.textContent = soundOn ? '🔔' : '🔕';
-  b.title = soundOn ? 'Notifications are on (click to turn off)' : 'Notifications are off (click to turn on)';
+  const off = silenced();
+  b.textContent = off ? '🔕' : '🔔';
+  b.title = !soundOn ? 'Notifications are off (click to turn on)'
+    : snoozed() ? 'Silenced until ' + new Date(notifSet.snoozeUntil).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' (open ⚙️ to change)'
+    : 'Notifications are on (click to turn off)';
+}
+function paintTitle() {
+  document.title = ringName ? '📞 ' + ringName + ' is calling…' : unseen ? '(' + unseen + ') ' + BASE_TITLE : BASE_TITLE;
 }
 paintSound();
-$('#soundBtn').onclick = async () => {
-  soundOn = !soundOn;
-  try { localStorage.setItem('chatterbox-sound', soundOn ? 'on' : 'off'); } catch {}
+setInterval(() => { paintSound(); if (notifSet.snoozeUntil && !snoozed()) { notifSet.snoozeUntil = 0; saveSet(); if (!$('#setView').classList.contains('hidden')) renderSettings(); } }, 15000);
+
+async function setMaster(on) {
+  soundOn = on;
+  try { localStorage.setItem('chatterbox-sound', on ? 'on' : 'off'); } catch {}
   paintSound();
-  if (!soundOn && incoming) {
+  if (!on && incoming) {
     const inc = incoming;
     await sendSignals({ id: inc.callId, convId: inc.convId }, [inc.from], 'busy');
     dismissIncoming();
   }
-  if (soundOn) { lastDing = 0; playDing(); }
-};
+  if (on && !snoozed()) { lastDing = 0; playDing(); }
+}
+$('#soundBtn').onclick = () => setMaster(!soundOn);
 
-function playDing() {
-  if (!soundOn || !ac || window.__lockShown) return;
+function playDing(force) {
+  if (!force && (silenced() || !notifSet.textSound)) return;
+  if (!ac || window.__lockShown) return;
   const now = Date.now();
-  if (now - lastDing < 1500) return;           // a flood of messages = one ding, not machine-gun noise
+  if (!force && now - lastDing < 1500) return;   // a flood of messages = one ding, not machine-gun noise
   lastDing = now;
   try {
     if (ac.state === 'suspended') ac.resume();
@@ -1940,18 +2005,193 @@ function playDing() {
   } catch {}
 }
 
-function notifyIncoming(m) {
-  if (!soundOn) return;
-  const away = document.hidden || !document.hasFocus();
-  const watching = !away && m.conversation_id === activeId;
-  console.log('[Chatterbox] message from someone else — sound on:', soundOn, '| audio:', ac ? ac.state : 'not unlocked (click the page once)', '| tab away:', away, '| watching this chat:', watching);
-  if (watching) return;                         // you're looking right at it
-  playDing();
-  if (away) { unseen++; document.title = '(' + unseen + ') ' + BASE_TITLE; }
+/* ---------- desktop pop-ups (browser Notification API) ---------- */
+const canNotify = () => 'Notification' in window;
+const notifPerm = () => canNotify() ? Notification.permission : 'unsupported';
+const liveNotes = {};
+const audioReady = () => !!(ac && ac.state === 'running');
+const iconUrl = () => document.querySelector('link[rel~="icon"]')?.href || '';
+
+function closeNote(tag) { try { liveNotes[tag]?.close(); } catch {} delete liveNotes[tag]; }
+function showNote(tag, title, body, { silent = true, sticky = false, onClick, autoClose = 0 } = {}) {
+  if (notifPerm() !== 'granted' || window.__lockShown) return null;
+  closeNote(tag);
+  try {
+    const n = new Notification(title, { body, tag, renotify: true, silent, requireInteraction: sticky, icon: iconUrl() });
+    n.onclick = () => { try { window.focus(); } catch {} try { n.close(); } catch {} try { onClick && onClick(); } catch {} };
+    n.onclose = () => { if (liveNotes[tag] === n) delete liveNotes[tag]; };
+    liveNotes[tag] = n;
+    if (autoClose) setTimeout(() => { if (liveNotes[tag] === n) closeNote(tag); }, autoClose);
+    return n;
+  } catch (e) { console.warn('[Chatterbox] notification failed:', e && e.message); return null; }
 }
-function resetTitle() { unseen = 0; document.title = BASE_TITLE; }
+const tabAway = () => document.hidden || !document.hasFocus();
+
+/** Ask the browser for permission. Must be called from a click. */
+async function askNotifPermission() {
+  if (!canNotify()) return 'unsupported';
+  try {
+    const r = await Notification.requestPermission();
+    return r;
+  } catch { return Notification.permission; }
+}
+
+/* ---------- incoming texts ---------- */
+function notifyIncoming(m) {
+  if (silenced() || window.__lockShown) return;
+  if (isMuted(m.conversation_id)) return;
+  const away = tabAway();
+  const watching = !away && m.conversation_id === activeId;
+  console.log('[Chatterbox] message from someone else — master on:', soundOn, '| audio:', ac ? ac.state : 'not unlocked (click the page once)', '| tab away:', away, '| watching this chat:', watching);
+  if (watching) return;                         // you're looking right at it
+  if (notifSet.textSound) playDing();
+  if (away) {
+    unseen++; paintTitle();
+    if (notifSet.textDesktop) {
+      const c = getConv(m.conversation_id);
+      const sender = profiles[m.sender_id]?.display_name || 'Someone';
+      const title = c && c.is_group ? sender + ' · ' + convTitle(c) : sender;
+      let body = 'New message';
+      if (notifSet.textPreview) { try { body = msgSnippet(m); } catch {} }
+      showNote('msg-' + m.conversation_id, title, body, {
+        silent: !notifSet.textSound || audioReady(),
+        autoClose: 10000,
+        onClick: () => { if (getConv(m.conversation_id)) openConv(m.conversation_id); }
+      });
+    }
+  }
+}
+function resetTitle() { unseen = 0; paintTitle(); }
 window.addEventListener('focus', resetTitle);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) resetTitle(); });
+
+/* ---------- incoming calls ---------- */
+function callAlert(name, video, convId) {
+  ringName = name; paintTitle();
+  if (!notifSet.callDesktop || !tabAway()) return;
+  showNote('call', name + ' is calling…', video ? 'Video call · click to answer' : 'Voice call · click to answer', {
+    silent: notifSet.callMode !== 'ring' || audioReady(),
+    sticky: true,
+    onClick: () => { try { $('#incoming').scrollIntoView?.(); } catch {} }
+  });
+}
+function callAlertEnd() { ringName = ''; paintTitle(); closeNote('call'); }
+
+/* ================================================================
+   SETTINGS PAGE
+   ================================================================ */
+const sv = () => $('#setView');
+function openSettings() { renderSettings(); sv().classList.remove('hidden'); }
+function closeSettings() { sv().classList.add('hidden'); }
+$('#setBtn').onclick = openSettings;
+$('#setBack').onclick = closeSettings;
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sv().classList.contains('hidden')) closeSettings(); });
+
+function snoozeText() {
+  if (!snoozed()) return '';
+  const d = new Date(notifSet.snoozeUntil);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return 'Silenced until ' + (sameDay ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' ') + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+function nextMorning() { const d = new Date(); d.setHours(8, 0, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return d.getTime(); }
+
+function row(id, title, sub, checked) {
+  return `<label class="setrow"><div class="tx"><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</div><input type="checkbox" data-k="${id}" ${checked ? 'checked' : ''}></label>`;
+}
+function radio(val, title, sub) {
+  return `<label class="setrow"><input type="radio" name="callMode" value="${val}" ${notifSet.callMode === val ? 'checked' : ''}><div class="tx"><b>${title}</b><small>${sub}</small></div></label>`;
+}
+
+function renderSettings() {
+  const body = $('#setBody'), top = body.scrollTop;
+  const perm = notifPerm();
+  const mutedChats = notifSet.muted.map(id => ({ id, c: getConv(id) })).filter(x => x.c);
+  const permHtml = perm === 'granted'
+    ? '<span class="setgood">✓ Allowed</span> — pop-ups appear when this tab is in the background.'
+    : perm === 'denied'
+      ? 'Blocked by your browser. Click the 🔒 / ⓘ icon in the address bar → Site settings → Notifications → Allow, then reload.'
+      : perm === 'unsupported'
+        ? 'This browser doesn’t support desktop pop-ups (on iPhone, add Chatterbox to your Home Screen first). Sounds and the tab title still work.'
+        : 'Not allowed yet — click the button so you actually get pinged when you’re in another tab.';
+  body.innerHTML = `
+    <h4>Everything</h4>
+    <div class="setcard">
+      ${row('master', 'Notifications', 'Master switch. When off, nothing dings, rings or pops up, and people who call you see “busy”.', soundOn)}
+      <div class="setrow static"><div class="tx"><b>Silence for a while</b><small>${snoozed() ? snoozeText() : 'Pause all alerts, then they turn back on by themselves.'}</small></div></div>
+      <div class="setbtns">
+        <button class="btn ghost small" data-snooze="1">1 hour</button>
+        <button class="btn ghost small" data-snooze="8">8 hours</button>
+        <button class="btn ghost small" data-snooze="am">Until 8 am</button>
+        ${snoozed() ? '<button class="btn small" data-snooze="0">Turn alerts back on</button>' : ''}
+      </div>
+    </div>
+
+    <h4>Calls</h4>
+    <div class="setcard">
+      ${radio('ring', '📞 Ring', 'Pop-up + ringtone')}
+      ${radio('quiet', '🔕 Quiet', 'Pop-up, but no ringtone or buzz')}
+      ${radio('dnd', '⛔ Do not disturb', 'You won’t see calls at all — the caller sees “busy”')}
+      ${row('callDesktop', 'Pop-up when I’m in another tab', 'A notification that stays until you answer or it stops ringing', notifSet.callDesktop)}
+    </div>
+
+    <h4>Texts</h4>
+    <div class="setcard">
+      ${row('textSound', 'Sound', 'A little ding on new messages', notifSet.textSound)}
+      ${row('textDesktop', 'Pop-up when I’m in another tab', 'Click it to jump straight to that chat', notifSet.textDesktop)}
+      ${row('textPreview', 'Show message preview', 'Off = pop-up just says “New message”', notifSet.textPreview)}
+    </div>
+    <div class="setnote">Muting a single chat is in that chat’s <b>Info</b> button. It silences texts from that chat only.</div>
+    ${mutedChats.length ? `<div class="setcard" style="margin-top:10px">${mutedChats.map(x => `<div class="setrow static"><div class="tx"><b>🔕 ${esc(convTitle(x.c))}</b></div><button class="btn ghost small" data-unmute="${x.id}">Unmute</button></div>`).join('')}</div>` : ''}
+
+    <h4>Desktop pop-ups</h4>
+    <div class="setcard">
+      <div class="setrow static"><div class="tx"><b>Browser permission</b><small>${permHtml}</small></div>${perm === 'default' ? '<button class="btn small" data-act="perm">Allow</button>' : ''}</div>
+      <div class="setbtns">
+        <button class="btn ghost small" data-act="testText">Test a text alert</button>
+        <button class="btn ghost small" data-act="testCall">Test a call ring (3 s)</button>
+      </div>
+    </div>
+    <div class="setnote">Pop-ups work while Chatterbox is open in a tab — a background tab or minimised window is fine. If you close the tab completely, nothing can reach you (that needs a push server). Settings are saved on this device.</div>
+    ${perm === 'denied' ? '<div class="setwarn">Pop-ups are blocked in your browser, so you’ll only hear dings and see the tab title change.</div>' : ''}
+    <div style="height:30px"></div>`;
+  body.scrollTop = top;
+}
+
+$('#setBody').addEventListener('change', async e => {
+  const t = e.target;
+  if (t.name === 'callMode') { notifSet.callMode = t.value; saveSet(); if (t.value === 'dnd' && incoming) { const inc = incoming; await sendSignals({ id: inc.callId, convId: inc.convId }, [inc.from], 'busy'); dismissIncoming(); } else if (t.value !== 'ring') stopRing(); renderSettings(); return; }
+  const k = t.dataset.k; if (!k) return;
+  if (k === 'master') { await setMaster(t.checked); renderSettings(); return; }
+  notifSet[k] = t.checked; saveSet();
+  // turning on a pop-up option: make sure the browser will actually allow it
+  if ((k === 'textDesktop' || k === 'callDesktop') && t.checked && notifPerm() === 'default') await askNotifPermission();
+  renderSettings();
+});
+$('#setBody').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.snooze !== undefined) {
+    const v = b.dataset.snooze;
+    notifSet.snoozeUntil = v === '0' ? 0 : v === 'am' ? nextMorning() : Date.now() + (+v) * 3600e3;
+    saveSet(); paintSound();
+    if (snoozed() && incoming) { const inc = incoming; await sendSignals({ id: inc.callId, convId: inc.convId }, [inc.from], 'busy'); dismissIncoming(); }
+    renderSettings();
+  } else if (b.dataset.unmute) {
+    setMuted(b.dataset.unmute, false);
+  } else if (b.dataset.act === 'perm') {
+    await askNotifPermission(); renderSettings();
+  } else if (b.dataset.act === 'testText') {
+    if (notifPerm() === 'default') await askNotifPermission();
+    playDing(true);
+    showNote('test', 'Chatterbox test', 'This is what a new message looks like.', { silent: audioReady(), autoClose: 6000 });
+    renderSettings();
+  } else if (b.dataset.act === 'testCall') {
+    if (notifPerm() === 'default') await askNotifPermission();
+    try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+    startRing(); setTimeout(() => { if (!incoming) stopRing(); }, 3000);
+    showNote('test-call', 'Test call', 'This is what an incoming call looks like.', { silent: audioReady(), autoClose: 4000 });
+    renderSettings();
+  }
+});
 
 /* ================================================================
    ADMIN + BANS
@@ -2569,9 +2809,11 @@ $('#infoBtn').onclick = () => {
       <div style="display:flex;gap:8px"><select id="addSel">${addable.map(x => `<option value="${x.id}">${esc(x.display_name)} (@${esc(x.username)})</option>`).join('')}</select><button class="btn" id="addBtn">Add</button></div>` : ''}
     <div class="actions">
       ${c.is_group ? '<button class="btn danger" id="leaveBtn">Leave group</button>' : `<button class="btn ${currentBlockStatus.iBlocked ? 'ghost' : 'danger'}" id="blockUserBtn">${currentBlockStatus.iBlocked ? 'Unblock person' : 'Block person'}</button>`}
+      <button class="btn ghost" id="muteBtn">${isMuted(c.id) ? '🔔 Unmute chat' : '🔕 Mute chat'}</button>
       <button class="btn ghost" id="mClose">Close</button>
     </div>`);
   $('#mClose').onclick = closeModal;
+  $('#muteBtn').onclick = () => { setMuted(c.id, !isMuted(c.id)); $('#muteBtn').textContent = isMuted(c.id) ? '🔔 Unmute chat' : '🔕 Mute chat'; };
   if ($('#blockUserBtn')) $('#blockUserBtn').onclick = async () => {
     const changed = await setUserBlocked(otherUserId, !currentBlockStatus.iBlocked);
     if (changed) { closeModal(); $('#infoBtn').click(); }
@@ -3179,7 +3421,7 @@ async function onRing(s) {
   if (!conv) { await loadConvs(); conv = getConv(s.conversation_id); }
   const blockStatus = await getBlockStatus(s.from_user, true);
   if (blockStatus.iBlocked || blockStatus.theyBlockedMe) return;
-  if (!soundOn) {
+  if (silenced() || notifSet.callMode === 'dnd') {      // silenced / do-not-disturb: caller just sees "busy"
     await sendSignals({ id: s.call_id, convId: s.conversation_id }, [s.from_user], 'busy');
     return;
   }
@@ -3192,13 +3434,15 @@ async function onRing(s) {
   $('#inTitle').textContent = (p.fromName || 'Someone') + ' is calling…';
   $('#inSub').textContent = (p.kind === 'video' ? 'Video call' : 'Voice call') + (p.title ? ' · ' + p.title : '');
   $('#incoming').classList.remove('hidden');
-  startRing();
+  if (notifSet.callMode === 'ring') startRing();
   incoming.timer = setTimeout(dismissIncoming, 45000);
+  callAlert(p.fromName || 'Someone', p.kind === 'video', s.conversation_id);
 }
 function dismissIncoming() {
   if (incoming) clearTimeout(incoming.timer);
   incoming = null; stopRing();
   $('#incoming').classList.add('hidden');
+  callAlertEnd();
 }
 $('#inAccept').onclick = async () => {
   const inc = incoming; if (!inc) return;
