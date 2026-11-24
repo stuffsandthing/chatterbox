@@ -76,6 +76,11 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 .msg.me .del-msg{filter:brightness(2)}
 .msg img{max-width:100%;max-height:300px;border-radius:8px;display:block;margin-bottom:4px}
 .msg a.file{display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none;background:rgba(0,0,0,.08);padding:8px 10px;border-radius:8px}
+.msg .msg-link{color:inherit;text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+.msg .link-embed{width:min(100%,520px);aspect-ratio:16/9;margin:8px 0;border-radius:10px;overflow:hidden;background:#000}
+.msg .link-embed iframe{width:100%;height:100%;display:block;border:0}
+.msg .link-embed.spotify-embed{aspect-ratio:auto;height:152px;background:transparent}
+.msg .link-embed.spotify-embed.tall{height:352px}
 .daysep{align-self:center;color:var(--muted);font-size:12px;margin:8px 0}
 #composer{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;background:var(--panel);border-top:1px solid var(--line)}
 #composer textarea{resize:none;max-height:230px;min-height:40px}
@@ -779,6 +784,167 @@ async function openConv(id) {
 
 function scrollDown() { const m = $('#msgs'); m.scrollTop = m.scrollHeight; }
 
+// Turn raw URLs into clickable links and render supported providers in safe, fixed iframe URLs.
+function normaliseMessageUrl(raw) {
+  let value = String(raw || '').trim();
+  if (!value) return null;
+  if (!/^https?:\/\//i.test(value)) value = 'https://' + value;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    if (!url.hostname || url.username || url.password) return null;
+    return url;
+  } catch (_) { return null; }
+}
+
+function messageEmbedInfo(raw) {
+  const url = raw instanceof URL ? raw : normaliseMessageUrl(raw);
+  if (!url) return null;
+  const host = url.hostname.toLowerCase().replace(/^www\./, '');
+  const parts = url.pathname.split('/').filter(Boolean);
+
+  // YouTube videos, Shorts, live streams and shortened youtu.be links.
+  if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+    let id = '';
+    if (url.pathname === '/watch') id = url.searchParams.get('v') || '';
+    else if (['embed','shorts','live','v'].includes(parts[0])) id = parts[1] || '';
+    if (/^[\w-]{11}$/.test(id)) return {
+      src: 'https://www.youtube-nocookie.com/embed/' + id,
+      title: 'YouTube video'
+    };
+  }
+  if (host === 'youtu.be') {
+    const id = parts[0] || '';
+    if (/^[\w-]{11}$/.test(id)) return {
+      src: 'https://www.youtube-nocookie.com/embed/' + id,
+      title: 'YouTube video'
+    };
+  }
+
+  // Vimeo.
+  if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+    const match = url.pathname.match(/(?:^|\/)video\/(\d+)|^\/(\d+)/);
+    const id = match && (match[1] || match[2]);
+    if (id) {
+      const embed = new URL('https://player.vimeo.com/video/' + id);
+      const hash = url.searchParams.get('h');
+      if (hash) embed.searchParams.set('h', hash);
+      return { src: embed.href, title: 'Vimeo video' };
+    }
+  }
+
+  // Dailymotion and its short-link host.
+  if (host === 'dailymotion.com' || host === 'dai.ly') {
+    const id = host === 'dai.ly' ? parts[0] : (url.pathname.match(/\/video\/([^_/?]+)/) || [])[1];
+    if (id && /^[\w]+$/.test(id)) return {
+      src: 'https://www.dailymotion.com/embed/video/' + id,
+      title: 'Dailymotion video'
+    };
+  }
+
+  // Spotify tracks, albums, playlists, episodes and shows.
+  if (host === 'open.spotify.com' && ['track','album','playlist','episode','show'].includes(parts[0]) && /^[\w]+$/.test(parts[1] || '')) {
+    return {
+      src: 'https://open.spotify.com/embed/' + parts[0] + '/' + parts[1],
+      title: 'Spotify ' + parts[0],
+      spotify: true,
+      tall: parts[0] !== 'track'
+    };
+  }
+
+  // Twitch channels and videos. Twitch requires the current site as a parent parameter.
+  if (host === 'twitch.tv' && window.location.hostname) {
+    const parent = encodeURIComponent(window.location.hostname);
+    if (parts[0] === 'videos' && /^\d+$/.test(parts[1] || '')) {
+      return { src: 'https://player.twitch.tv/?video=' + parts[1] + '&parent=' + parent, title: 'Twitch video' };
+    }
+    if (parts[0] && /^[\w]+$/.test(parts[0]) && !['directory','downloads','jobs','p','search','settings','store','subscriptions'].includes(parts[0].toLowerCase())) {
+      return { src: 'https://player.twitch.tv/?channel=' + encodeURIComponent(parts[0]) + '&parent=' + parent, title: 'Twitch stream' };
+    }
+  }
+
+  return null;
+}
+
+function makeMessageEmbed(info) {
+  if (!info) return null;
+  const box = document.createElement('div');
+  box.className = 'link-embed' + (info.spotify ? ' spotify-embed' : '') + (info.tall ? ' tall' : '');
+  const frame = document.createElement('iframe');
+  frame.src = info.src;
+  frame.title = info.title;
+  frame.loading = 'lazy';
+  frame.referrerPolicy = 'strict-origin-when-cross-origin';
+  frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+  frame.allowFullscreen = true;
+  box.appendChild(frame);
+  return box;
+}
+
+function linkifyMessageContent(tx) {
+  if (!tx) return;
+  const urlPattern = /(?:https?:\/\/|www\.)[^\s<>"'`]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<>"'` ]*)?/gi;
+  const walker = document.createTreeWalker(tx, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement?.closest('a,code,pre,script,style,iframe,button')) continue;
+    if (urlPattern.test(node.nodeValue)) { nodes.push(node); urlPattern.lastIndex = 0; }
+  }
+
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    urlPattern.lastIndex = 0;
+    let match, last = 0, changed = false;
+    const fragment = document.createDocumentFragment();
+    while ((match = urlPattern.exec(text))) {
+      let raw = match[0], clean = raw;
+      while (/[.,!?;:)]$/.test(clean)) clean = clean.slice(0, -1);
+      if (!clean) continue;
+      const start = match.index;
+      if (start > last) fragment.appendChild(document.createTextNode(text.slice(last, start)));
+      const url = normaliseMessageUrl(clean);
+      if (!url) {
+        fragment.appendChild(document.createTextNode(raw));
+        last = start + raw.length;
+        continue;
+      }
+      const link = document.createElement('a');
+      link.className = 'msg-link';
+      link.href = url.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = clean;
+      fragment.appendChild(link);
+
+      const embed = messageEmbedInfo(url);
+      if (embed) {
+        const player = makeMessageEmbed(embed);
+        if (player) fragment.appendChild(player);
+      }
+      if (clean.length < raw.length) fragment.appendChild(document.createTextNode(raw.slice(clean.length)));
+      last = start + raw.length;
+      changed = true;
+    }
+    if (changed) {
+      if (last < text.length) fragment.appendChild(document.createTextNode(text.slice(last)));
+      node.replaceWith(fragment);
+    }
+  }
+
+  // Also embed provider links that were already written as HTML anchor elements.
+  tx.querySelectorAll('a[href]').forEach(link => {
+    if (link.dataset.cbEmbedDone) return;
+    link.dataset.cbEmbedDone = '1';
+    const info = messageEmbedInfo(link.href);
+    if (!info) return;
+    const next = link.nextElementSibling;
+    if (next?.classList.contains('link-embed')) return;
+    const player = makeMessageEmbed(info);
+    if (player) link.after(player);
+  });
+}
+
 async function appendMsg(m, scroll = true) {
   if (document.querySelector(`[data-mid="${m.id}"]`)) return;
   msgCache[m.id] = m;
@@ -816,6 +982,7 @@ async function appendMsg(m, scroll = true) {
   div.dataset.mid = m.id;
   div.innerHTML = `${name}${quote}${file}${m.body ? `<div class="tx">${m.body}</div>` : ''}<div class="reacts hidden"></div><div class="tm">${fmtTime(m.created_at)}${delBtn}</div>`;
   box.appendChild(div);
+  div.querySelectorAll('.tx').forEach(linkifyMessageContent);
   if (Array.isArray(m.message_reactions)) reacts[m.id] = m.message_reactions.map(r => ({ user_id: r.user_id, emoji: r.emoji }));
   else if (!reacts[m.id]) reacts[m.id] = [];
   renderReacts(m.id);
