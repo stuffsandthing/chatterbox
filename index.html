@@ -803,6 +803,11 @@ function messageEmbedInfo(raw) {
   const host = url.hostname.toLowerCase().replace(/^www\./, '');
   const parts = url.pathname.split('/').filter(Boolean);
 
+  // Direct video files can be played by the browser without an external iframe.
+  if (/\.(mp4|webm|ogv)$/i.test(url.pathname)) {
+    return { videoUrl: url.href, title: 'Video' };
+  }
+
   // YouTube videos, Shorts, live streams and shortened youtu.be links.
   if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
     let id = '';
@@ -870,6 +875,18 @@ function makeMessageEmbed(info) {
   if (!info) return null;
   const box = document.createElement('div');
   box.className = 'link-embed' + (info.spotify ? ' spotify-embed' : '') + (info.tall ? ' tall' : '');
+  if (info.videoUrl) {
+    const video = document.createElement('video');
+    video.src = info.videoUrl;
+    video.controls = true;
+    video.preload = 'metadata';
+    video.playsInline = true;
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.objectFit = 'contain';
+    box.appendChild(video);
+    return box;
+  }
   const frame = document.createElement('iframe');
   frame.src = info.src;
   frame.title = info.title;
