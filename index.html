@@ -185,6 +185,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--accent)}
 #mkLayer .lbl2{font-size:12px;color:var(--muted);margin-top:8px}
 #mkLayer input[type=range]{width:100%}
 
+#permHint{padding:9px 14px;font-size:13px;background:var(--accent);color:var(--accent-text);cursor:pointer;line-height:1.35}
+#permHint.warn{background:rgba(220,38,38,.14);color:var(--danger)}
 #soundHint{padding:7px 14px;font-size:12px;background:var(--bg);color:var(--muted);border-bottom:1px solid var(--line);cursor:pointer}
 /* admin + bans */
 input[type=number]{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px;outline:none}
@@ -345,6 +347,7 @@ input[type=number]:focus{border-color:var(--accent)}
       <button class="btn ghost small" id="setBtn" title="Notification settings">⚙️</button>
       <button class="btn ghost small" id="logout">Log out</button>
     </div>
+    <div id="permHint" class="hidden"></div>
     <div id="soundHint" class="hidden">🔔 Click anywhere on this page once to enable notification sounds</div>
     <div class="tabs">
       <button id="tabChats" class="on">Chats</button>
@@ -603,6 +606,7 @@ async function startApp(user) {
   startP2P();
   startBans();
   if (soundOn && !ac) $('#soundHint').classList.remove('hidden');
+  paintPermHint();
 }
 
 function stopApp() {
@@ -1969,7 +1973,7 @@ function paintTitle() {
   document.title = ringName ? '📞 ' + ringName + ' is calling…' : unseen ? '(' + unseen + ') ' + BASE_TITLE : BASE_TITLE;
 }
 paintSound();
-setInterval(() => { paintSound(); if (notifSet.snoozeUntil && !snoozed()) { notifSet.snoozeUntil = 0; saveSet(); if (!$('#setView').classList.contains('hidden')) renderSettings(); } }, 15000);
+setInterval(() => { paintSound(); if (notifSet.snoozeUntil && !snoozed()) { notifSet.snoozeUntil = 0; saveSet(); if (!$('#setView').classList.contains('hidden')) renderSettings(); } paintPermHint(); }, 15000);
 
 async function setMaster(on) {
   soundOn = on;
@@ -2007,7 +2011,7 @@ function playDing(force) {
 
 /* ---------- desktop pop-ups (browser Notification API) ---------- */
 const canNotify = () => 'Notification' in window;
-const notifPerm = () => canNotify() ? Notification.permission : 'unsupported';
+const notifPerm = () => !canNotify() ? 'unsupported' : window.isSecureContext === false ? 'insecure' : Notification.permission;
 const liveNotes = {};
 const audioReady = () => !!(ac && ac.state === 'running');
 const iconUrl = () => document.querySelector('link[rel~="icon"]')?.href || '';
@@ -2034,6 +2038,17 @@ async function askNotifPermission() {
     const r = await Notification.requestPermission();
     return r;
   } catch { return Notification.permission; }
+  finally { paintPermHint(); if (!$('#setView').classList.contains('hidden')) renderSettings(); }
+}
+
+/** Blue bar at the top of the chat list until the browser has been told "allow pop-ups". */
+function paintPermHint() {
+  const h = $('#permHint'); if (!h) return;
+  const perm = notifPerm(), wants = notifSet.textDesktop || notifSet.callDesktop;
+  if (!wants || perm === 'granted' || perm === 'unsupported') { h.classList.add('hidden'); return; }
+  h.classList.remove('hidden');
+  if (perm === 'default') { h.className = ''; h.textContent = '🔔 Tap here to turn on pop-up alerts for calls and texts — your browser will ask once.'; h.onclick = () => askNotifPermission(); }
+  else { h.className = 'warn'; h.textContent = perm === 'insecure' ? '⚠️ Pop-ups need the https:// web address of the site. Tap for details.' : '⚠️ Pop-ups are blocked in this browser. Tap to see how to fix it.'; h.onclick = openSettings; }
 }
 
 /* ---------- incoming texts ---------- */
@@ -2110,9 +2125,12 @@ function renderSettings() {
     ? '<span class="setgood">✓ Allowed</span> — pop-ups appear when this tab is in the background.'
     : perm === 'denied'
       ? 'Blocked by your browser. Click the 🔒 / ⓘ icon in the address bar → Site settings → Notifications → Allow, then reload.'
-      : perm === 'unsupported'
-        ? 'This browser doesn’t support desktop pop-ups (on iPhone, add Chatterbox to your Home Screen first). Sounds and the tab title still work.'
-        : 'Not allowed yet — click the button so you actually get pinged when you’re in another tab.';
+      : perm === 'insecure'
+        ? (location.protocol === 'file:' ? 'You opened this from a file on your computer. Open the site from its web address (https://…) — browsers don’t allow pop-ups from files.' : 'This page isn’t on https://, so the browser refuses pop-ups. Use the https:// address of the site.')
+        : perm === 'unsupported'
+          ? 'This browser doesn’t support desktop pop-ups (on iPhone, add Chatterbox to your Home Screen first). Sounds and the tab title still work.'
+          : 'Not allowed yet — click Allow so you actually get pinged when you’re in another tab.';
+  const audioHtml = audioReady() ? '<span class="setgood">✓ Ready</span>' : 'Click anywhere on the page once so the browser lets Chatterbox play sounds.';
   body.innerHTML = `
     <h4>Everything</h4>
     <div class="setcard">
@@ -2146,6 +2164,7 @@ function renderSettings() {
     <h4>Desktop pop-ups</h4>
     <div class="setcard">
       <div class="setrow static"><div class="tx"><b>Browser permission</b><small>${permHtml}</small></div>${perm === 'default' ? '<button class="btn small" data-act="perm">Allow</button>' : ''}</div>
+      <div class="setrow static"><div class="tx"><b>Sound</b><small>${audioHtml}</small></div></div>
       <div class="setbtns">
         <button class="btn ghost small" data-act="testText">Test a text alert</button>
         <button class="btn ghost small" data-act="testCall">Test a call ring (3 s)</button>
@@ -2162,7 +2181,7 @@ $('#setBody').addEventListener('change', async e => {
   if (t.name === 'callMode') { notifSet.callMode = t.value; saveSet(); if (t.value === 'dnd' && incoming) { const inc = incoming; await sendSignals({ id: inc.callId, convId: inc.convId }, [inc.from], 'busy'); dismissIncoming(); } else if (t.value !== 'ring') stopRing(); renderSettings(); return; }
   const k = t.dataset.k; if (!k) return;
   if (k === 'master') { await setMaster(t.checked); renderSettings(); return; }
-  notifSet[k] = t.checked; saveSet();
+  notifSet[k] = t.checked; saveSet(); paintPermHint();
   // turning on a pop-up option: make sure the browser will actually allow it
   if ((k === 'textDesktop' || k === 'callDesktop') && t.checked && notifPerm() === 'default') await askNotifPermission();
   renderSettings();
