@@ -699,9 +699,19 @@ async function renderPeople() {
     heading = '<div class="empty" style="padding:10px 14px;text-align:left">Search results</div>';
     if (!people.length) { el.innerHTML = '<div class="empty">Nobody found for “' + esc(q) + '”.</div>'; return; }
   } else {
-    people = contacts;
-    if (!people.length) { el.innerHTML = '<div class="empty">No contacts yet.<br>Search above for a username or name, then tap <b>Add</b>.</div>'; return; }
-    heading = '<div class="empty" style="padding:10px 14px;text-align:left">Your contacts</div>';
+    // Keep blocked accounts visible even if they are not in the contacts list,
+    // so users can always unblock them from this tab.
+    const contactSet = new Set(contacts.map(p => p.id));
+    const missingBlocked = [...blockedIds].filter(uid => !contactSet.has(uid));
+    let blockedPeople = [];
+    if (missingBlocked.length) {
+      const { data } = await sb.from('profiles').select('id,username,display_name,avatar_url').in('id', missingBlocked);
+      blockedPeople = data || [];
+    }
+    if (mySeq !== peopleSeq) return;
+    people = [...contacts, ...blockedPeople];
+    if (!people.length) { el.innerHTML = '<div class="empty">No contacts or blocked people yet.<br>Search above for a username or name to chat, add or block someone.</div>'; return; }
+    heading = '<div class="empty" style="padding:10px 14px;text-align:left">Your contacts and blocked people</div>';
   }
   people.forEach(p => profiles[p.id] = p);
   el.innerHTML = heading + people.map(p => `
