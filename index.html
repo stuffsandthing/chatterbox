@@ -3674,16 +3674,17 @@ async function sendCallMsg() {
   let body = clampText(t.value).trim();
   if (!body || !call) return;
   if (banGuard()) return;
-  const active = getConv(c?.convId || activeId);
+  const c = call;
+  const active = getConv(c.convId);
   if (active && !active.is_group) {
     currentBlockStatus = await getBlockStatus(dmOther(active), true);
+    if (call !== c) return;
     applyBanState(false);
+    if (currentBlockStatus.iBlocked || currentBlockStatus.theyBlockedMe) return;
   }
-  if (currentPairBlocked()) { applyBanState(false); return; }
   body = cleanOrBlock(body);
   if (body === null) return;
   if (!spamOk(body, true)) return;
-  const c = call;
   t.value = '';
   const { data, error } = await sb.from('messages').insert({ conversation_id: c.convId, sender_id: me.id, body }).select().single();
   if (error) { t.value = body; return sendErr(error); }
