@@ -319,7 +319,7 @@ input[type=number]:focus{border-color:var(--accent)}
       <button class="btn ghost small" id="soundBtn" title="Notifications on/off">🔔</button>
       <button class="btn ghost small" id="logout">Log out</button>
     </div>
-    <div id="soundHint" class="hidden">🔔 Click anywhere on this page once to turn on message sounds</div>
+    <div id="soundHint" class="hidden">🔔 Click anywhere on this page once to enable notification sounds</div>
     <div class="tabs">
       <button id="tabChats" class="on">Chats</button>
       <button id="tabPeople">People</button>
@@ -1512,6 +1512,12 @@ function renderPending() {
 async function sendText() {
   if (sending || !activeId) return;
   if (banGuard()) return;
+  const active = getConv(activeId);
+  if (active && !active.is_group) {
+    currentBlockStatus = await getBlockStatus(dmOther(active), true);
+    if (activeId !== active.id) return;
+    applyBanState(false);
+  }
   if (currentPairBlocked()) { applyBanState(false); return; }
   const t = $('#text'); let body = t.value.trim();
   if (!body && !pending.length) return;
@@ -3667,7 +3673,13 @@ async function sendCallMsg() {
   const t = $('#ccText');
   let body = clampText(t.value).trim();
   if (!body || !call) return;
-  if (banGuard() || currentPairBlocked()) { applyBanState(false); return; }
+  if (banGuard()) return;
+  const active = getConv(c?.convId || activeId);
+  if (active && !active.is_group) {
+    currentBlockStatus = await getBlockStatus(dmOther(active), true);
+    applyBanState(false);
+  }
+  if (currentPairBlocked()) { applyBanState(false); return; }
   body = cleanOrBlock(body);
   if (body === null) return;
   if (!spamOk(body, true)) return;
